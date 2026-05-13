@@ -44,9 +44,70 @@ String      mdnsName         = "doorbell";
 bool        mdnsOk           = false;
 unsigned long lastMdnsTryMs  = 0;
 bool        shouldReboot     = false;
+bool        pendingRestart   = false;
+unsigned long restartAtMs    = 0;
+bool        wifiWasConnected = false;
+unsigned long lastWiFiReconnectMs = 0;
+
+const unsigned long WIFI_RECONNECT_INTERVAL_MS = 10000;
 
 void onConfigSaved() {
   shouldReboot = true;
+}
+
+String buildMdnsName(const String &label) {
+  String name = "doorbell";
+  if (label.length() > 0) name += "-" + label;
+  return name;
+}
+
+bool startMdnsNow(const String &name) {
+  Serial.printf("mDNS: begin %s\n", name.c_str());
+  bool ok = MDNS.begin(name.c_str());
+  if (ok) {
+    Serial.println("mDNS: started");
+    MDNS.addService("http", "tcp", 80);
+  } else {
+    Serial.println("mDNS: begin failed, will retry");
+  }
+  mdnsOk = ok;
+  lastMdnsTryMs = millis();
+  return ok;
+}
+
+void scheduleRestart(unsigned long delayMs) {
+  pendingRestart = true;
+  restartAtMs = millis() + delayMs;
+}
+
+void maintainWiFiConnection() {
+  wl_status_t status = WiFi.status();
+  bool connected = (status == WL_CONNECTED);
+  unsigned long now = millis();
+
+  if (connected) {
+    if (!wifiWasConnected) {
+      Serial.print("WiFi: reconnected, IP: ");
+      Serial.println(WiFi.localIP());
+      wifiWasConnected = true;
+      if (mdnsOk) MDNS.end();
+      startMdnsNow(mdnsName);
+    }
+    return;
+  }
+
+  if (wifiWasConnected) {
+    Serial.printf("WiFi: disconnected, status=%d\n", status);
+    wifiWasConnected = false;
+    mdnsOk = false;
+    MDNS.end();
+  }
+
+  if (now - lastWiFiReconnectMs >= WIFI_RECONNECT_INTERVAL_MS) {
+    Serial.printf("WiFi: reconnect attempt, status=%d\n", status);
+    WiFi.reconnect();
+    lastWiFiReconnectMs = now;
+  }
 }
 
 bool applyGainParam(AsyncWebServerRequest *request) {
@@ -89,6 +150,12 @@ void handleStatus(AsyncWebServerRequest *request) {
   doc["fsFreeKB"] = freeBytes / 1024.0;
   doc["fsUsedPct"] = usedPct;
   doc["wifi"] = (WiFi.status() == WL_CONNECTED) ? "connected" : "disconnected";
+  doc["ip"] = WiFi.isConnected() ? WiFi.localIP().toString() : "";
+  doc["mdns"] = buildMdnsName(deviceLabel) + ".local";
+  doc["deviceLabel"] = deviceLabel;
+  doc["gain"] = currentGain;
+  doc["activeName"] = displayFilename;
+  doc["activePath"] = activeFilePath;
 
   String payload;
   serializeJson(doc, payload);
@@ -512,10 +579,14 @@ void stopPlayback() {
 }
 
 void playBootSound() {
-  if (Startup_Signal_mp3_len == 0) return;
+  if (Startup_Signal_mp3_len == 0 || !out) return;
   stopPlayback();
+  Serial.printf("Boot sound: %u bytes\n", Startup_Signal_mp3_len);
   bootSource = new AudioFileSourcePROGMEM(Startup_Signal_mp3, Startup_Signal_mp3_len);
-  if (!bootSource) return;
+  if (!bootSource) {
+    Serial.println("Boot sound: source allocation failed");
+    return;
+  }
   if (!mp3) mp3 = new AudioGeneratorMP3();
   out->SetGain(currentGain);
   mp3->begin(bootSource, out);
@@ -526,6 +597,7 @@ void playBootSound() {
     if (!mp3->loop()) break;
     delay(1);
   }
+  Serial.println("Boot sound: done");
   stopPlayback();
 }
 
@@ -625,6 +697,42 @@ void handleSetGain(AsyncWebServerRequest *request) {
   }
 }
 
+void handleSetLabel(AsyncWebServerRequest *request) {
+  String raw = "";
+  if (request->hasParam("label", true)) {
+    raw = request->getParam("label", true)->value();
+  } else if (request->hasParam("label")) {
+    raw = request->getParam("label")->value();
+  } else {
+    request->send(400, "application/json", "{\"ok\":false,\"error\":\"Missing label\"}");
+    return;
+  }
+
+  String newLabel = sanitizeLabel(raw);
+  if (newLabel != deviceLabel) {
+    deviceLabel = newLabel;
+    saveDeviceConfig(deviceLabel);
+  }
+
+  mdnsName = buildMdnsName(deviceLabel);
+  if (mdnsOk) MDNS.end();
+  startMdnsNow(mdnsName);
+
+  StaticJsonDocument<256> doc;
+  doc["ok"] = true;
+  doc["label"] = deviceLabel;
+  doc["mdns"] = mdnsName + ".local";
+  String payload;
+  serializeJson(doc, payload);
+  request->send(200, "application/json", payload);
+}
+
+void handleResetWiFi(AsyncWebServerRequest *request) {
+  WiFi.disconnect(true, true); // clear credentials from NVS
+  scheduleRestart(600);
+  request->send(200, "application/json", "{\"ok\":true,\"restarting\":true}");
+}
+
 // ── Clean all user files ───────────────────────────────────────────────────
 void handleClean(AsyncWebServerRequest *request) {
   int count = 0;
@@ -660,35 +768,22 @@ static const char ROOT_PAGE_TEMPLATE[] PROGMEM = R"rawliteral(
     button {background:#2563eb; color:white; border:none; padding:1.2rem 2rem; border-radius:12px; font-size:1.3rem; cursor:pointer; margin:1rem; min-width:220px;}
     button:hover {background:#1d4ed8;}
     button:disabled {background:#9ca3af; cursor:not-allowed;}
+    .manage-wrap {margin-top:0.6rem; text-align:center;}
+    .manage-btn {
+      background:#e5e7eb;
+      color:#374151;
+      border:1px solid #d1d5db;
+      padding:0.55rem 0.9rem;
+      border-radius:9px;
+      font-size:0.95rem;
+      min-width:auto;
+      margin:0;
+    }
+    .manage-btn:hover {background:#d1d5db;}
     .status {font-size:1.1rem; margin:1.5rem 0; color:#4b5563;}
     .big {font-size:1.4rem; font-weight:bold; color:#111;}
     .file-info {font-size:1rem; color:#6b7280; margin-top:0.5rem;}
     .ip-info {font-size:0.82rem; color:#9ca3af; margin-top:0.2rem;}
-    .list {margin:1.2rem 0; text-align:left;}
-    .list-title {font-size:1rem; color:#374151; margin-bottom:0.6rem;}
-    .list-item {display:flex; align-items:center; gap:0.4rem; padding:2px 0; line-height:1.2; }
-    .list-item input[type=radio] {margin:0 4px 0 0;}
-    .list-item label {cursor:pointer; flex:1; margin:0;}
-    .trash-btn {
-      background: transparent;
-      border: none;
-      color: #9ca3af;
-      cursor: pointer;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 2px;
-      margin: 0;
-      height: 20px;
-      width: 20px;
-      line-height: 1;
-    }
-    .trash-btn:hover { color:#ef4444; }
-    .trash-btn svg { width: 14px; height: 14px; display:block; }
-    .volume-box {margin:1.5rem 0; padding:1rem; background:#f1f5f9; border-radius:8px;}
-    .slider-container {margin:1.5rem 0;}
-    input[type=range] {width:90%; max-width:400px; height:12px;}
-    #gainDisplay {font-size:1.4em; font-weight:bold; margin:0.5rem 0;}
     .info-box {margin:1.2rem 0; text-align:left;}
     .info-row {display:flex; justify-content:space-between; align-items:center; font-size:0.95rem; color:#374151; margin-bottom:0.4rem;}
     .bar {width:100%; height:10px; background:#e5e7eb; border-radius:999px; overflow:hidden;}
@@ -706,7 +801,6 @@ static const char ROOT_PAGE_TEMPLATE[] PROGMEM = R"rawliteral(
       <div class="ip-info">IP: __IPADDR__</div>
     </div>
     __PLAYBTN__
-    <a href="/upload"><button>Change Chime / Upload New</button></a>
 
     <div class="info-box" id="wifiBox">
       <div class="info-row">
@@ -718,41 +812,22 @@ static const char ROOT_PAGE_TEMPLATE[] PROGMEM = R"rawliteral(
 
     <div class="info-box" id="fsBox">
       <div class="info-row">
-        <span>SPIFFS Free Space</span>
-        <span id="fsText">__FSTEXT__</span>
+        <span>Available Storage</span>
+      <span id="fsText">__FSTEXT__</span>
       </div>
       <div class="bar"><div id="fsBar" class="fill__FSCLASS__" style="width:__FSPCT__%"></div></div>
     </div>
 
-    <div class="list">
-      <div class="list-title">Available Chimes</div>
-      <div id="soundList">Loading…</div>
-    </div>
-
-    <div class="volume-box">
-      <div class="slider-container">
-        <label>Volume Gain (0.0 – 3.0):</label><br>
-        <input type="range" min="0" max="300" value="__GAIN100__" step="1" id="gainSlider">
-        <div id="gainDisplay">__GAIN__</div>
-      </div>
+    <div class="manage-wrap">
+      <a href="/upload"><button class="manage-btn">Manage Chimes</button></a>
     </div>
   </div>
 
   <script>
-    const slider = document.getElementById('gainSlider');
-    const display = document.getElementById('gainDisplay');
-    slider.addEventListener('input', () => {
-      const val = slider.value / 100;
-      display.textContent = val.toFixed(2);
-      fetch(`/setgain?value=${val}`);
-    });
-
     const wifiText = document.getElementById('wifiText');
     const wifiBar  = document.getElementById('wifiBar');
     const fsText   = document.getElementById('fsText');
     const fsBar    = document.getElementById('fsBar');
-    const soundList = document.getElementById('soundList');
-    const fileInfo = document.getElementById('fileInfo');
 
     function barClass(pct, warnAt, badAt) {
       if (pct < badAt) return 'fill bad';
@@ -783,61 +858,7 @@ static const char ROOT_PAGE_TEMPLATE[] PROGMEM = R"rawliteral(
         .catch(() => {});
     }
 
-    function refreshSounds() {
-      fetch('/list')
-        .then(r => r.json())
-        .then(s => {
-          if (!s.items || s.items.length === 0) {
-            soundList.textContent = 'No chimes uploaded yet.';
-            return;
-          }
-          soundList.innerHTML = '';
-          s.items.forEach(item => {
-            const row = document.createElement('div');
-            row.className = 'list-item';
-            const radio = document.createElement('input');
-            radio.type = 'radio';
-            radio.name = 'activeSound';
-            radio.value = item.path;
-            radio.checked = (item.path === s.active);
-            radio.addEventListener('change', () => {
-              fetch(`/setactive?path=${encodeURIComponent(item.path)}`)
-                .then(r => r.json())
-                .then(resp => {
-                  if (resp && resp.displayName) {
-                    fileInfo.textContent = resp.displayName;
-                  }
-                })
-                .catch(() => {});
-            });
-            const label = document.createElement('label');
-            label.textContent = item.name || item.path;
-            const del = document.createElement('button');
-            del.className = 'trash-btn';
-            del.title = 'Delete';
-            del.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 6h18"/>
-              <path d="M8 6V4h8v2"/>
-              <path d="M19 6l-1 14H6L5 6"/>
-              <path d="M10 11v6M14 11v6"/>
-            </svg>`;
-            del.addEventListener('click', () => {
-              if (!confirm(`Delete "${item.name || item.path}"?`)) return;
-              fetch(`/delete?path=${encodeURIComponent(item.path)}`)
-                .then(() => refreshSounds())
-                .catch(() => {});
-            });
-            row.appendChild(radio);
-            row.appendChild(label);
-            row.appendChild(del);
-            soundList.appendChild(row);
-          });
-        })
-        .catch(() => { soundList.textContent = 'Unable to load list.'; });
-    }
-
     setInterval(refreshStatus, 10000);
-    refreshSounds();
   </script>
 </body>
 </html>
@@ -872,6 +893,7 @@ void handleRoot(AsyncWebServerRequest *request) {
   int usedPct = totalBytes ? int((usedBytes * 100) / totalBytes) : 0;
   String fsText = String(freeBytes / 1024.0, 1) + " kB free of " + String(totalBytes / 1024.0, 1) + " kB";
   String ipText = WiFi.isConnected() ? WiFi.localIP().toString() : "not connected";
+  String mdnsHost = buildMdnsName(deviceLabel) + ".local";
 
   String html = FPSTR(ROOT_PAGE_TEMPLATE);
   html.replace("__STATUS__", statusLine);
@@ -886,6 +908,8 @@ void handleRoot(AsyncWebServerRequest *request) {
   html.replace("__FSCLASS__", String(usedPct > 85 ? " bad" : (usedPct > 70 ? " warn" : "")));
   html.replace("__GAIN100__", String(int(currentGain * 100)));
   html.replace("__GAIN__", String(currentGain, 2));
+  html.replace("__DEVICE_LABEL__", deviceLabel);
+  html.replace("__MDNS_HOST__", mdnsHost);
 
   AsyncWebServerResponse *response = request->beginResponse(200, "text/html", html);
   response->addHeader("Cache-Control", "no-store");
@@ -899,7 +923,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Upload Chime</title>
+  <title>Manage Chimes</title>
   <style>
     :root {
       --primary: #2563eb;
@@ -942,6 +966,90 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       text-align: center;
       font-weight: 600;
     }
+    .status {
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+    .status .big {
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .status .sub {
+      color: var(--text-light);
+      margin-top: 0.25rem;
+      font-size: 0.95rem;
+      word-break: break-word;
+    }
+    .status .tiny {
+      color: #9ca3af;
+      margin-top: 0.2rem;
+      font-size: 0.8rem;
+    }
+    .info-box {margin:1rem 0; text-align:left;}
+    .info-row {display:flex; justify-content:space-between; align-items:center; font-size:0.95rem; color:#374151; margin-bottom:0.4rem;}
+    .bar {width:100%; height:10px; background:#e5e7eb; border-radius:999px; overflow:hidden;}
+    .fill {height:100%; background:#2563eb;}
+    .fill.warn {background:#f59e0b;}
+    .fill.bad {background:#ef4444;}
+    .section {
+      margin-top: 1.25rem;
+      padding-top: 1rem;
+      border-top: 1px solid #e5e7eb;
+    }
+    .section h2 {
+      margin: 0 0 0.8rem;
+      font-size: 1rem;
+      color: #374151;
+      text-align: left;
+    }
+    .list-item {display:flex; align-items:center; gap:0.4rem; padding:2px 0; line-height:1.2; text-align:left;}
+    .list-item input[type=radio] {margin:0 4px 0 0;}
+    .list-item label {cursor:pointer; flex:1; margin:0;}
+    .trash-btn {
+      background: transparent;
+      border: none;
+      color: #9ca3af;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px;
+      margin: 0;
+      height: 20px;
+      width: 20px;
+      line-height: 1;
+    }
+    .trash-btn:hover { color:#ef4444; }
+    .trash-btn svg { width: 14px; height: 14px; display:block; }
+    .play-btn {
+      background: transparent;
+      border: none;
+      color: #2563eb;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2px;
+      margin: 0;
+      height: 20px;
+      width: 20px;
+      line-height: 1;
+    }
+    .play-btn:hover { color:#1d4ed8; }
+    .play-btn svg { width: 14px; height: 14px; display:block; }
+    .network-box {text-align:left; background:#f8fafc; border:1px solid #e5e7eb; border-radius:10px; padding:0.8rem;}
+    .network-title {font-size:0.9rem; font-weight:600; color:#374151; margin-bottom:0.5rem;}
+    .network-row {display:flex; gap:0.4rem; align-items:center;}
+    .network-row input {flex:1; border:1px solid #d1d5db; border-radius:8px; padding:0.45rem 0.55rem; font-size:0.9rem;}
+    .network-row button {width:auto; min-width:auto; margin:0; padding:0.5rem 0.9rem; font-size:0.9rem; border-radius:8px;}
+    .network-help {margin-top:0.45rem; font-size:0.78rem; color:#6b7280; text-align:left;}
+    .btn-secondary {background:#64748b;}
+    .btn-secondary:hover:not(:disabled) {background:#475569;}
+    .volume-box {margin-top: 0.5rem; padding:1rem; background:#f1f5f9; border-radius:8px; text-align:center;}
+    .slider-container {margin:0.4rem 0;}
+    input[type=range] {width:90%; max-width:400px; height:12px;}
+    #gainDisplay {font-size:1.4em; font-weight:bold; margin:0.5rem 0;}
     #fileName {
       font-weight: 600;
       color: var(--primary);
@@ -1056,7 +1164,32 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
 </head>
 <body>
   <div class="card">
-    <h1>Upload Chime</h1>
+    <h1>Manage Chimes</h1>
+    <div class="status">
+      <div class="big" id="deviceStatus">Loading…</div>
+      <div class="sub" id="deviceActive">No chime loaded</div>
+      <div class="tiny">IP: <span id="deviceIp">—</span></div>
+      <div class="tiny">mDNS: <span id="deviceMdns">doorbell.local</span></div>
+    </div>
+
+    <div class="info-box" id="wifiBox">
+      <div class="info-row">
+        <span>Wi‑Fi Signal</span>
+        <span id="wifiText">Loading…</span>
+      </div>
+      <div class="bar"><div id="wifiBar" class="fill" style="width:0%"></div></div>
+    </div>
+
+    <div class="info-box" id="fsBox">
+      <div class="info-row">
+        <span>Available Storage</span>
+        <span id="fsText">Loading…</span>
+      </div>
+      <div class="bar"><div id="fsBar" class="fill" style="width:0%"></div></div>
+    </div>
+
+    <div class="section">
+      <h2>Upload New Sound</h2>
     <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">
       <label for="fileInput" class="prompt">Choose a WAV or MP3 file</label>
       <input type="file" id="fileInput" name="file" accept=".wav,.mp3" required>
@@ -1071,11 +1204,41 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
       </div>
     </form>
+    </div>
+
+    <div class="section">
+      <h2>Available Chimes</h2>
+      <div id="soundList" style="text-align:left;">Loading…</div>
+    </div>
+
+    <div class="section">
+      <h2>Volume</h2>
+      <div class="volume-box">
+        <div class="slider-container">
+          <label>Volume Gain (0.0 – 3.0):</label><br>
+          <input type="range" min="0" max="300" value="100" step="1" id="gainSlider">
+          <div id="gainDisplay">1.00</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Network</h2>
+      <div class="network-box">
+        <div class="network-title">Device Name</div>
+        <div class="network-row">
+          <input id="labelInput" type="text" value="" maxlength="24" placeholder="front-door">
+          <button id="saveLabelBtn" type="button">Save Name</button>
+          <button id="resetWifiBtn" class="btn-secondary" type="button">Reset Wi‑Fi</button>
+        </div>
+        <div class="network-help">mDNS: <span id="mdnsHost">doorbell.local</span></div>
+      </div>
+    </div>
     <div class="danger">
       <button id="cleanBtn" type="button">Delete All Files</button>
     </div>
     <div class="back">
-      <a href="/">← Back to main page</a>
+      <a href="/">← Back to Home</a>
     </div>
   </div>
 
@@ -1089,7 +1252,28 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     const progressText = document.getElementById('progressText');
     const progressFill = document.getElementById('progressFill');
     const cleanBtn = document.getElementById('cleanBtn');
+    const wifiText = document.getElementById('wifiText');
+    const wifiBar = document.getElementById('wifiBar');
+    const fsText = document.getElementById('fsText');
+    const fsBar = document.getElementById('fsBar');
+    const deviceStatus = document.getElementById('deviceStatus');
+    const deviceActive = document.getElementById('deviceActive');
+    const deviceIp = document.getElementById('deviceIp');
+    const deviceMdns = document.getElementById('deviceMdns');
+    const soundList = document.getElementById('soundList');
+    const gainSlider = document.getElementById('gainSlider');
+    const gainDisplay = document.getElementById('gainDisplay');
+    const labelInput = document.getElementById('labelInput');
+    const saveLabelBtn = document.getElementById('saveLabelBtn');
+    const resetWifiBtn = document.getElementById('resetWifiBtn');
+    const mdnsHost = document.getElementById('mdnsHost');
     let maxBytes = 3000 * 1024;
+
+    function barClass(pct, warnAt, badAt) {
+      if (pct < badAt) return 'fill bad';
+      if (pct < warnAt) return 'fill warn';
+      return 'fill';
+    }
 
     function updateFileInfo() {
       const file = fileInput.files[0];
@@ -1112,6 +1296,12 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     }
 
     fileInput.addEventListener('change', updateFileInfo);
+
+    gainSlider.addEventListener('input', () => {
+      const val = gainSlider.value / 100;
+      gainDisplay.textContent = val.toFixed(2);
+      fetch(`/setgain?value=${val}`).catch(() => {});
+    });
 
     document.getElementById('uploadForm').addEventListener('submit', e => {
       const file = fileInput.files[0];
@@ -1158,9 +1348,9 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         uploadBtn.classList.remove('is-loading');
         uploadText.textContent = 'Upload';
       };
-    xhr.open('POST', '/upload', true);
-    xhr.send(formData);
-  });
+      xhr.open('POST', '/upload', true);
+      xhr.send(formData);
+    });
 
     cleanBtn.addEventListener('click', () => {
       if (!confirm('Delete ALL uploaded files? Cannot be undone!')) return;
@@ -1169,17 +1359,144 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         .catch(() => {});
     });
 
-    fetch('/status')
+    function refreshStatus() {
+      fetch('/status')
+        .then(r => r.json())
+        .then(s => {
+          const signalPct = s.signalPct ?? 0;
+          const rssi = s.rssi ?? -100;
+          const wifi = s.wifi || 'disconnected';
+          wifiText.textContent = (wifi === 'connected')
+            ? `${rssi} dBm (${signalPct}%)`
+            : 'Disconnected';
+          wifiBar.style.width = `${signalPct}%`;
+          wifiBar.className = barClass(signalPct, 60, 30);
+
+          const usedPct = s.fsUsedPct ?? 0;
+          const freeKB = (s.fsFreeKB ?? 0).toFixed(1);
+          const totalKB = (s.fsTotalKB ?? 0).toFixed(1);
+          fsText.textContent = `${freeKB} kB free of ${totalKB} kB`;
+          fsBar.style.width = `${usedPct}%`;
+          fsBar.className = barClass(100 - usedPct, 30, 15);
+
+          maxBytes = Math.max(0, ((s.fsFreeKB ?? 0) * 1024) - (4 * 1024));
+          const activeName = s.activeName || 'No chime loaded';
+          const hasActive = (s.activePath || '').length > 0;
+          deviceStatus.textContent = hasActive ? 'Manage Chimes' : 'No Chime Loaded';
+          deviceActive.textContent = activeName;
+          deviceIp.textContent = s.ip || 'not connected';
+          deviceMdns.textContent = s.mdns || 'doorbell.local';
+          mdnsHost.textContent = s.mdns || 'doorbell.local';
+          labelInput.value = (s.deviceLabel ?? labelInput.value ?? '');
+          const gain = Number(s.gain ?? 1);
+          if (document.activeElement !== gainSlider) {
+            gainSlider.value = Math.round(gain * 100);
+            gainDisplay.textContent = gain.toFixed(2);
+          }
+        })
+        .catch(() => {});
+    }
+
+    function refreshSounds() {
+      fetch('/list')
+        .then(r => r.json())
+        .then(s => {
+          if (!s.items || s.items.length === 0) {
+            soundList.textContent = 'No chimes uploaded yet.';
+            return;
+          }
+          soundList.innerHTML = '';
+          s.items.forEach(item => {
+            const row = document.createElement('div');
+            row.className = 'list-item';
+            const radio = document.createElement('input');
+            radio.type = 'radio';
+            radio.name = 'activeSound';
+            radio.value = item.path;
+            radio.checked = (item.path === s.active);
+            radio.addEventListener('change', () => {
+              fetch(`/setactive?path=${encodeURIComponent(item.path)}`)
+                .then(() => { refreshSounds(); refreshStatus(); })
+                .catch(() => {});
+            });
+            const label = document.createElement('label');
+            label.textContent = item.name || item.path;
+            const play = document.createElement('button');
+            play.className = 'play-btn';
+            play.title = 'Play';
+            play.type = 'button';
+            play.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5v14l11-7z"/>
+            </svg>`;
+            play.addEventListener('click', () => {
+              const endpoint = item.endpoint || `/play?key=${encodeURIComponent(item.key || '')}`;
+              fetch(endpoint).catch(() => {});
+            });
+            const del = document.createElement('button');
+            del.className = 'trash-btn';
+            del.title = 'Delete';
+            del.type = 'button';
+            del.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>
+            </svg>`;
+            del.addEventListener('click', () => {
+              if (!confirm(`Delete "${item.name || item.path}"?`)) return;
+              fetch(`/delete?path=${encodeURIComponent(item.path)}`)
+                .then(() => { refreshSounds(); refreshStatus(); })
+                .catch(() => {});
+            });
+            row.appendChild(radio);
+            row.appendChild(label);
+            row.appendChild(play);
+            row.appendChild(del);
+            soundList.appendChild(row);
+          });
+        })
+        .catch(() => { soundList.textContent = 'Unable to load list.'; });
+    }
+
+    function saveLabel() {
+      const body = `label=${encodeURIComponent(labelInput.value)}`;
+      fetch('/setlabel', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body
+      })
       .then(r => r.json())
-      .then(s => {
-        const freeKB = s.fsFreeKB ?? 0;
-        maxBytes = Math.max(0, (freeKB * 1024) - (4 * 1024));
+      .then(resp => {
+        if (resp && resp.ok) {
+          labelInput.value = resp.label || '';
+          mdnsHost.textContent = resp.mdns || 'doorbell.local';
+          deviceMdns.textContent = resp.mdns || 'doorbell.local';
+        }
       })
       .catch(() => {});
+    }
+
+    function resetWiFi() {
+      if (!confirm('Reset Wi-Fi credentials and reboot to captive portal?')) return;
+      fetch('/resetwifi', {method:'POST'})
+        .then(() => {
+          deviceStatus.textContent = 'Rebooting…';
+        })
+        .catch(() => {});
+    }
+
+    saveLabelBtn.addEventListener('click', saveLabel);
+    labelInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        saveLabel();
+      }
+    });
+    resetWifiBtn.addEventListener('click', resetWiFi);
 
     // Init
     uploadBtn.disabled = true;
     updateFileInfo();
+    refreshStatus();
+    refreshSounds();
+    setInterval(refreshStatus, 10000);
   </script>
 </body>
 </html>
@@ -1187,7 +1504,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
 
 void handleUploadForm(AsyncWebServerRequest *request) {
   AsyncWebServerResponse *response = request->beginResponse_P(200, "text/html", UPLOAD_PAGE_HTML);
-  response->addHeader("Cache-Control", "max-age=3600");
+  response->addHeader("Cache-Control", "no-store");
   request->send(response);
 }
 
@@ -1284,6 +1601,14 @@ void setup() {
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
 
+  out = new AudioOutputI2S();
+  out->SetPinout(4, 5, 6);
+  out->SetGain(currentGain);
+
+  wav = new AudioGeneratorWAV();
+  mp3 = new AudioGeneratorMP3();
+  playBootSound();
+
   if (!SPIFFS.begin(false)) {
     Serial.println("SPIFFS mount failed, formatting...");
     if (!SPIFFS.format() || !SPIFFS.begin(false)) {
@@ -1305,17 +1630,23 @@ void setup() {
 
   WiFiManager wifiManager;
   wifiManager.setSaveConfigCallback(onConfigSaved);
+  wifiManager.setConnectTimeout(20);
+  wifiManager.setConfigPortalTimeout(180);
   String labelDefault = deviceLabel;
   char labelBuf[32];
   labelDefault.toCharArray(labelBuf, sizeof(labelBuf));
   WiFiManagerParameter labelParam("label", "Room/Label (e.g. front-door)", labelBuf, 31);
   wifiManager.addParameter(&labelParam);
+  WiFi.setAutoReconnect(true);
   Serial.println("WiFiManager: starting autoConnect");
   bool wifiOk = wifiManager.autoConnect("DoorbellChimeSetup", "config123");
   Serial.println(wifiOk ? "WiFiManager: connected (portal not active)" : "WiFiManager: failed (portal timeout or error)");
+  WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false); // lower latency, higher power
   if (wifiOk) {
-    WiFi.mode(WIFI_STA);
-    WiFi.setSleep(false); // lower latency, higher power
+    wifiWasConnected = true;
+  } else {
+    lastWiFiReconnectMs = millis() - WIFI_RECONNECT_INTERVAL_MS;
   }
 
   String newLabel = sanitizeLabel(String(labelParam.getValue()));
@@ -1330,26 +1661,17 @@ void setup() {
     ESP.restart();
   }
 
-  mdnsName = "doorbell";
-  if (deviceLabel.length() > 0) {
-    mdnsName += "-" + deviceLabel;
-  }
+  mdnsName = buildMdnsName(deviceLabel);
 
   Serial.print("IP: "); Serial.println(WiFi.localIP());
-
-  out = new AudioOutputI2S();
-  out->SetPinout(4, 5, 6);
-  out->SetGain(currentGain);
-
-  wav = new AudioGeneratorWAV();
-  mp3 = new AudioGeneratorMP3();
-  playBootSound();
 
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){ handleRoot(request); });
   server.on("/chime", HTTP_GET, [](AsyncWebServerRequest *request){ handleChime(request); });
   server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request){ handleStatus(request); });
   server.on("/list", HTTP_GET, [](AsyncWebServerRequest *request){ handleList(request); });
   server.on("/setgain", HTTP_GET, [](AsyncWebServerRequest *request){ handleSetGain(request); });
+  server.on("/setlabel", HTTP_POST, [](AsyncWebServerRequest *request){ handleSetLabel(request); });
+  server.on("/resetwifi", HTTP_POST, [](AsyncWebServerRequest *request){ handleResetWiFi(request); });
   server.on("/play", HTTP_GET, [](AsyncWebServerRequest *request){ handlePlayByKey(request); });
   server.on("/setactive", HTTP_GET, [](AsyncWebServerRequest *request){ handleSetActive(request); });
   server.on("/delete", HTTP_GET, [](AsyncWebServerRequest *request){ handleDelete(request); });
@@ -1404,19 +1726,17 @@ void setup() {
   }
 
   delay(1500);
-  Serial.printf("mDNS: begin %s\n", mdnsName.c_str());
-  mdnsOk = MDNS.begin(mdnsName.c_str());
-  if (mdnsOk) {
-    Serial.println("mDNS: started");
-    MDNS.addService("http", "tcp", 80);
-  } else {
-    Serial.println("mDNS: begin failed, will retry");
-  }
-  lastMdnsTryMs = millis();
+  startMdnsNow(mdnsName);
 }
 
 // ── Loop ───────────────────────────────────────────────────────────────────
 void loop() {
+  if (pendingRestart && millis() >= restartAtMs) {
+    ESP.restart();
+  }
+
+  maintainWiFiConnection();
+
 #if defined(ESP8266)
   MDNS.update(); // keep mDNS responder alive on ESP8266
 #endif
@@ -1441,12 +1761,7 @@ void loop() {
     unsigned long now = millis();
     if (now - lastMdnsTryMs > 5000) {
       Serial.printf("mDNS: retry begin %s\n", mdnsName.c_str());
-      mdnsOk = MDNS.begin(mdnsName.c_str());
-      if (mdnsOk) {
-        Serial.println("mDNS: started");
-        MDNS.addService("http", "tcp", 80);
-      }
-      lastMdnsTryMs = now;
+      startMdnsNow(mdnsName);
     }
   }
   delay(1);
