@@ -40,6 +40,8 @@ String      uploadError      = "";
 String      uploadTargetPath = "";
 String      uploadDisplayName = "";
 String      deviceLabel      = "";
+String      authToken        = "";
+bool        playbackAuth     = false;
 String      mdnsName         = "doorbell";
 bool        mdnsOk           = false;
 unsigned long lastMdnsTryMs  = 0;
@@ -78,6 +80,46 @@ bool startMdnsNow(const String &name) {
 void scheduleRestart(unsigned long delayMs) {
   pendingRestart = true;
   restartAtMs = millis() + delayMs;
+}
+
+String sanitizeToken(const String &input) {
+  String out;
+  out.reserve(64);
+  for (size_t i = 0; i < input.length(); ++i) {
+    char c = input[i];
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+        (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.') {
+      out += c;
+    }
+    if (out.length() >= 64) break;
+  }
+  return out;
+}
+
+String requestToken(AsyncWebServerRequest *request) {
+  if (request->hasParam("token", true)) return request->getParam("token", true)->value();
+  if (request->hasParam("token")) return request->getParam("token")->value();
+  if (request->hasHeader("X-Auth-Token")) {
+    const AsyncWebHeader* h = request->getHeader("X-Auth-Token");
+    if (h) return h->value();
+  }
+  return "";
+}
+
+bool tokenMatches(AsyncWebServerRequest *request) {
+  return authToken.length() == 0 || requestToken(request) == authToken;
+}
+
+bool requireAdminAuth(AsyncWebServerRequest *request) {
+  if (tokenMatches(request)) return true;
+  request->send(403, "application/json", "{\"ok\":false,\"error\":\"Forbidden\"}");
+  return false;
+}
+
+bool requirePlaybackAuth(AsyncWebServerRequest *request) {
+  if (!playbackAuth || tokenMatches(request)) return true;
+  sendTriggerResponse(request, 403, "Forbidden");
+  return false;
 }
 
 void maintainWiFiConnection() {
@@ -156,6 +198,8 @@ void handleStatus(AsyncWebServerRequest *request) {
   doc["gain"] = currentGain;
   doc["activeName"] = displayFilename;
   doc["activePath"] = activeFilePath;
+  doc["authEnabled"] = authToken.length() > 0;
+  doc["playbackAuth"] = playbackAuth;
 
   String payload;
   serializeJson(doc, payload);
@@ -220,6 +264,7 @@ void handleList(AsyncWebServerRequest *request) {
 }
 
 void handleSetActive(AsyncWebServerRequest *request) {
+  if (!requireAdminAuth(request)) return;
   if (!request->hasParam("path")) {
     request->send(400, "application/json", "{\"ok\":false}");
     return;
@@ -245,6 +290,7 @@ void handleSetActive(AsyncWebServerRequest *request) {
 }
 
 void handleDelete(AsyncWebServerRequest *request) {
+  if (!requireAdminAuth(request)) return;
   if (!request->hasParam("path")) {
     request->send(400, "application/json", "{\"ok\":false}");
     return;
@@ -269,6 +315,7 @@ void handleDelete(AsyncWebServerRequest *request) {
 }
 
 void handlePlayByKey(AsyncWebServerRequest *request) {
+  if (!requirePlaybackAuth(request)) return;
   if (!applyGainParam(request)) {
     sendTriggerResponse(request, 400, "Invalid gain");
     return;
@@ -547,22 +594,32 @@ void saveSoundsConfig(const String &activePath, const String &activeName) {
 
 void loadDeviceConfig() {
   deviceLabel = "";
+  authToken = "";
+  playbackAuth = false;
   if (!SPIFFS.exists(DEVICE_FILE)) return;
   File f = SPIFFS.open(DEVICE_FILE, "r");
   if (!f) return;
 
-  StaticJsonDocument<128> doc;
+  StaticJsonDocument<256> doc;
   DeserializationError error = deserializeJson(doc, f);
   f.close();
 
   if (!error && doc.containsKey("label")) {
     deviceLabel = doc["label"].as<String>();
   }
+  if (!error && doc.containsKey("token")) {
+    authToken = sanitizeToken(doc["token"].as<String>());
+  }
+  if (!error && doc.containsKey("playbackAuth")) {
+    playbackAuth = doc["playbackAuth"].as<bool>();
+  }
 }
 
 void saveDeviceConfig(const String &label) {
-  StaticJsonDocument<128> doc;
+  StaticJsonDocument<256> doc;
   doc["label"] = label;
+  if (authToken.length() > 0) doc["token"] = authToken;
+  doc["playbackAuth"] = playbackAuth;
   File f = SPIFFS.open(DEVICE_FILE, "w");
   if (!f) return;
   serializeJson(doc, f);
@@ -654,6 +711,7 @@ bool playChimePath(const String &path) {
 
 // ── Webhook trigger ────────────────────────────────────────────────────────
 void handleChime(AsyncWebServerRequest *request) {
+  if (!requirePlaybackAuth(request)) return;
   if (!applyGainParam(request)) {
     sendTriggerResponse(request, 400, "Invalid gain");
     return;
@@ -682,6 +740,7 @@ void handleChime(AsyncWebServerRequest *request) {
 
 // ── Set gain ───────────────────────────────────────────────────────────────
 void handleSetGain(AsyncWebServerRequest *request) {
+  if (!requireAdminAuth(request)) return;
   if (request->hasParam("value")) {
     float newGain = request->getParam("value")->value().toFloat();
     if (newGain >= 0.0 && newGain <= 3.0) {
@@ -698,6 +757,7 @@ void handleSetGain(AsyncWebServerRequest *request) {
 }
 
 void handleSetLabel(AsyncWebServerRequest *request) {
+  if (!requireAdminAuth(request)) return;
   String raw = "";
   if (request->hasParam("label", true)) {
     raw = request->getParam("label", true)->value();
@@ -727,7 +787,36 @@ void handleSetLabel(AsyncWebServerRequest *request) {
   request->send(200, "application/json", payload);
 }
 
+void handleSetSecurity(AsyncWebServerRequest *request) {
+  if (!requireAdminAuth(request)) return;
+
+  if (request->hasParam("newToken", true)) {
+    authToken = sanitizeToken(request->getParam("newToken", true)->value());
+  } else if (request->hasParam("newToken")) {
+    authToken = sanitizeToken(request->getParam("newToken")->value());
+  }
+
+  if (request->hasParam("playbackAuth", true)) {
+    String val = request->getParam("playbackAuth", true)->value();
+    playbackAuth = (val == "1" || val == "true" || val == "on");
+  } else if (request->hasParam("playbackAuth")) {
+    String val = request->getParam("playbackAuth")->value();
+    playbackAuth = (val == "1" || val == "true" || val == "on");
+  }
+
+  saveDeviceConfig(deviceLabel);
+
+  StaticJsonDocument<128> doc;
+  doc["ok"] = true;
+  doc["authEnabled"] = authToken.length() > 0;
+  doc["playbackAuth"] = playbackAuth;
+  String payload;
+  serializeJson(doc, payload);
+  request->send(200, "application/json", payload);
+}
+
 void handleResetWiFi(AsyncWebServerRequest *request) {
+  if (!requireAdminAuth(request)) return;
   WiFi.disconnect(true, true); // clear credentials from NVS
   scheduleRestart(600);
   request->send(200, "application/json", "{\"ok\":true,\"restarting\":true}");
@@ -735,6 +824,7 @@ void handleResetWiFi(AsyncWebServerRequest *request) {
 
 // ── Clean all user files ───────────────────────────────────────────────────
 void handleClean(AsyncWebServerRequest *request) {
+  if (!requireAdminAuth(request)) return;
   int count = 0;
   File root = SPIFFS.open("/");
   File file = root.openNextFile();
@@ -828,6 +918,13 @@ static const char ROOT_PAGE_TEMPLATE[] PROGMEM = R"rawliteral(
     const wifiBar  = document.getElementById('wifiBar');
     const fsText   = document.getElementById('fsText');
     const fsBar    = document.getElementById('fsBar');
+    const playBtn  = document.getElementById('playBtn');
+
+    function withToken(url) {
+      const token = localStorage.getItem('doorbellAuthToken') || '';
+      if (!token) return url;
+      return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+    }
 
     function barClass(pct, warnAt, badAt) {
       if (pct < badAt) return 'fill bad';
@@ -859,6 +956,7 @@ static const char ROOT_PAGE_TEMPLATE[] PROGMEM = R"rawliteral(
     }
 
     setInterval(refreshStatus, 10000);
+    if (playBtn) playBtn.addEventListener('click', () => fetch(withToken('/chime')).catch(() => {}));
   </script>
 </body>
 </html>
@@ -878,7 +976,7 @@ void handleRoot(AsyncWebServerRequest *request) {
   }
 
   String playButtonHTML = hasChime ?
-    "<button onclick=\"fetch('/chime')\">Play Current Chime</button>" :
+    "<button id=\"playBtn\" type=\"button\">Play Current Chime</button>" :
     "<button disabled>Play Current Chime (not available)</button>";
 
   int rssi = (WiFi.status() == WL_CONNECTED) ? WiFi.RSSI() : -100;
@@ -1044,6 +1142,11 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     .network-row input {flex:1; border:1px solid #d1d5db; border-radius:8px; padding:0.45rem 0.55rem; font-size:0.9rem;}
     .network-row button {width:auto; min-width:auto; margin:0; padding:0.5rem 0.9rem; font-size:0.9rem; border-radius:8px;}
     .network-help {margin-top:0.45rem; font-size:0.78rem; color:#6b7280; text-align:left;}
+    .security-row {display:flex; gap:0.4rem; align-items:center; margin-top:0.5rem;}
+    .security-row input[type=password] {flex:1; border:1px solid #d1d5db; border-radius:8px; padding:0.45rem 0.55rem; font-size:0.9rem;}
+    .security-row button {width:auto; min-width:auto; margin:0; padding:0.5rem 0.9rem; font-size:0.9rem; border-radius:8px;}
+    .check-row {display:flex; gap:0.45rem; align-items:center; margin-top:0.55rem; font-size:0.85rem; color:#374151;}
+    .check-row input {width:auto;}
     .btn-secondary {background:#64748b;}
     .btn-secondary:hover:not(:disabled) {background:#475569;}
     .volume-box {margin-top: 0.5rem; padding:1rem; background:#f1f5f9; border-radius:8px; text-align:center;}
@@ -1234,6 +1337,22 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         <div class="network-help">mDNS: <span id="mdnsHost">doorbell.local</span></div>
       </div>
     </div>
+
+    <div class="section">
+      <h2>Security</h2>
+      <div class="network-box">
+        <div class="network-title">Shared Token</div>
+        <div class="security-row">
+          <input id="tokenInput" type="password" value="" maxlength="64" placeholder="leave empty to disable">
+          <button id="saveSecurityBtn" type="button">Save Token</button>
+        </div>
+        <label class="check-row">
+          <input id="playbackAuthInput" type="checkbox">
+          Require token for playback URLs
+        </label>
+        <div class="network-help" id="securityState">Token auth disabled</div>
+      </div>
+    </div>
     <div class="danger">
       <button id="cleanBtn" type="button">Delete All Files</button>
     </div>
@@ -1267,7 +1386,23 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     const saveLabelBtn = document.getElementById('saveLabelBtn');
     const resetWifiBtn = document.getElementById('resetWifiBtn');
     const mdnsHost = document.getElementById('mdnsHost');
+    const tokenInput = document.getElementById('tokenInput');
+    const saveSecurityBtn = document.getElementById('saveSecurityBtn');
+    const playbackAuthInput = document.getElementById('playbackAuthInput');
+    const securityState = document.getElementById('securityState');
     let maxBytes = 3000 * 1024;
+    let authToken = localStorage.getItem('doorbellAuthToken') || '';
+
+    function withToken(url) {
+      if (!authToken) return url;
+      return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(authToken)}`;
+    }
+
+    function tokenBody(params = {}) {
+      const body = new URLSearchParams(params);
+      if (authToken) body.set('token', authToken);
+      return body.toString();
+    }
 
     function barClass(pct, warnAt, badAt) {
       if (pct < badAt) return 'fill bad';
@@ -1300,7 +1435,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     gainSlider.addEventListener('input', () => {
       const val = gainSlider.value / 100;
       gainDisplay.textContent = val.toFixed(2);
-      fetch(`/setgain?value=${val}`).catch(() => {});
+      fetch(withToken(`/setgain?value=${val}`)).catch(() => {});
     });
 
     document.getElementById('uploadForm').addEventListener('submit', e => {
@@ -1319,6 +1454,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
 
       const formData = new FormData();
       formData.append('file', file);
+      if (authToken) formData.append('token', authToken);
 
       const xhr = new XMLHttpRequest();
       const startTime = performance.now();
@@ -1348,13 +1484,13 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         uploadBtn.classList.remove('is-loading');
         uploadText.textContent = 'Upload';
       };
-      xhr.open('POST', '/upload', true);
+      xhr.open('POST', withToken('/upload'), true);
       xhr.send(formData);
     });
 
     cleanBtn.addEventListener('click', () => {
       if (!confirm('Delete ALL uploaded files? Cannot be undone!')) return;
-      fetch('/clean', {method:'POST'})
+      fetch(withToken('/clean'), {method:'POST'})
         .then(() => location.href = '/')
         .catch(() => {});
     });
@@ -1388,6 +1524,8 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           deviceMdns.textContent = s.mdns || 'doorbell.local';
           mdnsHost.textContent = s.mdns || 'doorbell.local';
           labelInput.value = (s.deviceLabel ?? labelInput.value ?? '');
+          playbackAuthInput.checked = !!s.playbackAuth;
+          securityState.textContent = s.authEnabled ? 'Token auth enabled' : 'Token auth disabled';
           const gain = Number(s.gain ?? 1);
           if (document.activeElement !== gainSlider) {
             gainSlider.value = Math.round(gain * 100);
@@ -1415,7 +1553,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             radio.value = item.path;
             radio.checked = (item.path === s.active);
             radio.addEventListener('change', () => {
-              fetch(`/setactive?path=${encodeURIComponent(item.path)}`)
+              fetch(withToken(`/setactive?path=${encodeURIComponent(item.path)}`))
                 .then(() => { refreshSounds(); refreshStatus(); })
                 .catch(() => {});
             });
@@ -1430,7 +1568,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             </svg>`;
             play.addEventListener('click', () => {
               const endpoint = item.endpoint || `/play?key=${encodeURIComponent(item.key || '')}`;
-              fetch(endpoint).catch(() => {});
+              fetch(withToken(endpoint)).catch(() => {});
             });
             const del = document.createElement('button');
             del.className = 'trash-btn';
@@ -1441,7 +1579,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             </svg>`;
             del.addEventListener('click', () => {
               if (!confirm(`Delete "${item.name || item.path}"?`)) return;
-              fetch(`/delete?path=${encodeURIComponent(item.path)}`)
+              fetch(withToken(`/delete?path=${encodeURIComponent(item.path)}`))
                 .then(() => { refreshSounds(); refreshStatus(); })
                 .catch(() => {});
             });
@@ -1456,8 +1594,8 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     }
 
     function saveLabel() {
-      const body = `label=${encodeURIComponent(labelInput.value)}`;
-      fetch('/setlabel', {
+      const body = tokenBody({label: labelInput.value});
+      fetch(withToken('/setlabel'), {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body
@@ -1470,12 +1608,41 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           deviceMdns.textContent = resp.mdns || 'doorbell.local';
         }
       })
-      .catch(() => {});
+        .catch(() => {});
+    }
+
+    function saveSecurity() {
+      const newToken = tokenInput.value.trim();
+      const previousToken = authToken;
+      const body = tokenBody({
+        newToken,
+        playbackAuth: playbackAuthInput.checked ? '1' : '0'
+      });
+      fetch(withToken('/setsecurity'), {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body
+      })
+      .then(r => {
+        if (!r.ok) throw new Error('save failed');
+        return r.json();
+      })
+      .then(resp => {
+        authToken = newToken;
+        if (authToken) localStorage.setItem('doorbellAuthToken', authToken);
+        else localStorage.removeItem('doorbellAuthToken');
+        tokenInput.value = '';
+        securityState.textContent = resp.authEnabled ? 'Token auth enabled' : 'Token auth disabled';
+      })
+      .catch(() => {
+        authToken = previousToken;
+        securityState.textContent = 'Token save failed';
+      });
     }
 
     function resetWiFi() {
       if (!confirm('Reset Wi-Fi credentials and reboot to captive portal?')) return;
-      fetch('/resetwifi', {method:'POST'})
+      fetch(withToken('/resetwifi'), {method:'POST'})
         .then(() => {
           deviceStatus.textContent = 'Rebooting…';
         })
@@ -1490,6 +1657,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       }
     });
     resetWifiBtn.addEventListener('click', resetWiFi);
+    saveSecurityBtn.addEventListener('click', saveSecurity);
 
     // Init
     uploadBtn.disabled = true;
@@ -1509,6 +1677,7 @@ void handleUploadForm(AsyncWebServerRequest *request) {
 }
 
 void handleUploadDone(AsyncWebServerRequest *request) {
+  if (!requireAdminAuth(request)) return;
   if (!uploadSucceeded) {
     if (uploadError.length() > 0) {
       request->send(413, "text/plain", uploadError);
@@ -1545,6 +1714,10 @@ void handleFileUpload(AsyncWebServerRequest *request, String filename, size_t in
     uploadError = "";
     uploadTargetPath = "";
     uploadDisplayName = "";
+    if (!tokenMatches(request)) {
+      uploadError = "Forbidden";
+      return;
+    }
     String lower = filename;
     lower.toLowerCase();
     String ext = lower.endsWith(".mp3") ? ".mp3" : ".wav";
@@ -1671,6 +1844,7 @@ void setup() {
   server.on("/list", HTTP_GET, [](AsyncWebServerRequest *request){ handleList(request); });
   server.on("/setgain", HTTP_GET, [](AsyncWebServerRequest *request){ handleSetGain(request); });
   server.on("/setlabel", HTTP_POST, [](AsyncWebServerRequest *request){ handleSetLabel(request); });
+  server.on("/setsecurity", HTTP_POST, [](AsyncWebServerRequest *request){ handleSetSecurity(request); });
   server.on("/resetwifi", HTTP_POST, [](AsyncWebServerRequest *request){ handleResetWiFi(request); });
   server.on("/play", HTTP_GET, [](AsyncWebServerRequest *request){ handlePlayByKey(request); });
   server.on("/setactive", HTTP_GET, [](AsyncWebServerRequest *request){ handleSetActive(request); });
@@ -1699,6 +1873,7 @@ void setup() {
           String path;
           String unusedName;
           if (resolveSoundByIndex((size_t)idx, path, unusedName)) {
+            if (!requirePlaybackAuth(request)) return;
             if (!applyGainParam(request)) {
               sendTriggerResponse(request, 400, "Invalid gain");
               return;
