@@ -1101,9 +1101,18 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       color: #374151;
       text-align: left;
     }
-    .list-item {display:flex; align-items:center; gap:0.4rem; padding:2px 0; line-height:1.2; text-align:left;}
-    .list-item input[type=radio] {margin:0 4px 0 0;}
-    .list-item label {cursor:pointer; flex:1; margin:0;}
+    .list-item {
+      display:grid;
+      grid-template-columns:22px minmax(0, 1fr) 44px 44px;
+      align-items:center;
+      column-gap:0.2rem;
+      min-height:44px;
+      padding:0;
+      line-height:1.2;
+      text-align:left;
+    }
+    .list-item input[type=radio] {margin:0;}
+    .list-item label {cursor:pointer; margin:0; min-width:0; overflow-wrap:anywhere;}
     .trash-btn {
       background: transparent;
       border: none;
@@ -1112,14 +1121,16 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      padding: 2px;
+      padding: 0;
       margin: 0;
-      height: 20px;
-      width: 20px;
+      height: 44px;
+      width: 44px;
       line-height: 1;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
     }
     .trash-btn:hover { color:#ef4444; }
-    .trash-btn svg { width: 14px; height: 14px; display:block; }
+    .trash-btn svg { width: 18px; height: 18px; display:block; pointer-events:none; }
     .play-btn {
       background: transparent;
       border: none;
@@ -1128,14 +1139,16 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      padding: 2px;
+      padding: 0;
       margin: 0;
-      height: 20px;
-      width: 20px;
+      height: 44px;
+      width: 44px;
       line-height: 1;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
     }
     .play-btn:hover { color:#1d4ed8; }
-    .play-btn svg { width: 14px; height: 14px; display:block; }
+    .play-btn svg { width: 18px; height: 18px; display:block; pointer-events:none; }
     .network-box {text-align:left; background:#f8fafc; border:1px solid #e5e7eb; border-radius:10px; padding:0.8rem;}
     .network-title {font-size:0.9rem; font-weight:600; color:#374151; margin-bottom:0.5rem;}
     .network-row {display:flex; gap:0.4rem; align-items:center;}
@@ -1398,6 +1411,29 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       return `${url}${url.includes('?') ? '&' : '?'}token=${encodeURIComponent(authToken)}`;
     }
 
+    function rememberToken(token) {
+      authToken = (token || '').trim();
+      if (authToken) localStorage.setItem('doorbellAuthToken', authToken);
+      else localStorage.removeItem('doorbellAuthToken');
+    }
+
+    function promptForToken() {
+      const token = prompt('Enter shared token for this chime');
+      if (token === null) return false;
+      rememberToken(token);
+      if (tokenInput) tokenInput.value = '';
+      return !!authToken;
+    }
+
+    function fetchAuth(url, options = {}, retry = true) {
+      return fetch(withToken(url), options).then(r => {
+        if (r.status === 403 && retry && promptForToken()) {
+          return fetchAuth(url, options, false);
+        }
+        return r;
+      });
+    }
+
     function tokenBody(params = {}) {
       const body = new URLSearchParams(params);
       if (authToken) body.set('token', authToken);
@@ -1435,7 +1471,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     gainSlider.addEventListener('input', () => {
       const val = gainSlider.value / 100;
       gainDisplay.textContent = val.toFixed(2);
-      fetch(withToken(`/setgain?value=${val}`)).catch(() => {});
+      fetchAuth(`/setgain?value=${val}`).catch(() => {});
     });
 
     document.getElementById('uploadForm').addEventListener('submit', e => {
@@ -1471,6 +1507,8 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           document.open();
           document.write(xhr.responseText);
           document.close();
+        } else if (xhr.status === 403 && promptForToken()) {
+          progressText.textContent = 'Token saved. Tap Upload again.';
         } else {
           progressText.textContent = `Upload failed (${xhr.status})`;
         }
@@ -1490,9 +1528,12 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
 
     cleanBtn.addEventListener('click', () => {
       if (!confirm('Delete ALL uploaded files? Cannot be undone!')) return;
-      fetch(withToken('/clean'), {method:'POST'})
-        .then(() => location.href = '/')
-        .catch(() => {});
+      fetchAuth('/clean', {method:'POST'})
+        .then(r => {
+          if (!r.ok) throw new Error(`Clean failed (${r.status})`);
+          location.href = '/';
+        })
+        .catch(err => alert(err.message || 'Clean failed'));
     });
 
     function refreshStatus() {
@@ -1553,9 +1594,13 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             radio.value = item.path;
             radio.checked = (item.path === s.active);
             radio.addEventListener('change', () => {
-              fetch(withToken(`/setactive?path=${encodeURIComponent(item.path)}`))
-                .then(() => { refreshSounds(); refreshStatus(); })
-                .catch(() => {});
+              fetchAuth(`/setactive?path=${encodeURIComponent(item.path)}`)
+                .then(r => {
+                  if (!r.ok) throw new Error(`Select failed (${r.status})`);
+                  refreshSounds();
+                  refreshStatus();
+                })
+                .catch(err => alert(err.message || 'Select failed'));
             });
             const label = document.createElement('label');
             label.textContent = item.name || item.path;
@@ -1566,9 +1611,15 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             play.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M8 5v14l11-7z"/>
             </svg>`;
-            play.addEventListener('click', () => {
+            play.addEventListener('click', e => {
+              e.preventDefault();
+              e.stopPropagation();
               const endpoint = item.endpoint || `/play?key=${encodeURIComponent(item.key || '')}`;
-              fetch(withToken(endpoint)).catch(() => {});
+              fetchAuth(endpoint)
+                .then(r => {
+                  if (!r.ok) throw new Error(`Play failed (${r.status})`);
+                })
+                .catch(err => alert(err.message || 'Play failed'));
             });
             const del = document.createElement('button');
             del.className = 'trash-btn';
@@ -1577,11 +1628,17 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             del.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
               <path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>
             </svg>`;
-            del.addEventListener('click', () => {
+            del.addEventListener('click', e => {
+              e.preventDefault();
+              e.stopPropagation();
               if (!confirm(`Delete "${item.name || item.path}"?`)) return;
-              fetch(withToken(`/delete?path=${encodeURIComponent(item.path)}`))
-                .then(() => { refreshSounds(); refreshStatus(); })
-                .catch(() => {});
+              fetchAuth(`/delete?path=${encodeURIComponent(item.path)}`)
+                .then(r => {
+                  if (!r.ok) throw new Error(`Delete failed (${r.status})`);
+                  refreshSounds();
+                  refreshStatus();
+                })
+                .catch(err => alert(err.message || 'Delete failed'));
             });
             row.appendChild(radio);
             row.appendChild(label);
@@ -1595,12 +1652,15 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
 
     function saveLabel() {
       const body = tokenBody({label: labelInput.value});
-      fetch(withToken('/setlabel'), {
+      fetchAuth('/setlabel', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body
       })
-      .then(r => r.json())
+      .then(r => {
+        if (!r.ok) throw new Error(`Save failed (${r.status})`);
+        return r.json();
+      })
       .then(resp => {
         if (resp && resp.ok) {
           labelInput.value = resp.label || '';
@@ -1618,7 +1678,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         newToken,
         playbackAuth: playbackAuthInput.checked ? '1' : '0'
       });
-      fetch(withToken('/setsecurity'), {
+      fetchAuth('/setsecurity', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
         body
@@ -1628,25 +1688,24 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         return r.json();
       })
       .then(resp => {
-        authToken = newToken;
-        if (authToken) localStorage.setItem('doorbellAuthToken', authToken);
-        else localStorage.removeItem('doorbellAuthToken');
+        rememberToken(newToken);
         tokenInput.value = '';
         securityState.textContent = resp.authEnabled ? 'Token auth enabled' : 'Token auth disabled';
       })
       .catch(() => {
-        authToken = previousToken;
+        rememberToken(previousToken);
         securityState.textContent = 'Token save failed';
       });
     }
 
     function resetWiFi() {
       if (!confirm('Reset Wi-Fi credentials and reboot to captive portal?')) return;
-      fetch(withToken('/resetwifi'), {method:'POST'})
-        .then(() => {
+      fetchAuth('/resetwifi', {method:'POST'})
+        .then(r => {
+          if (!r.ok) throw new Error(`Reset failed (${r.status})`);
           deviceStatus.textContent = 'Rebooting…';
         })
-        .catch(() => {});
+        .catch(err => alert(err.message || 'Reset failed'));
     }
 
     saveLabelBtn.addEventListener('click', saveLabel);
