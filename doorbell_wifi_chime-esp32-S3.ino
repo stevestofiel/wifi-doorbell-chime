@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 Steve Stofiel
+
 #include <Arduino.h>
 #include <FS.h>
 #include <SPIFFS.h>

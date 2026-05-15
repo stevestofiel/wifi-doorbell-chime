@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+
 # Security Notes
 
 This firmware is intended for trusted LAN use only. Do not expose the device

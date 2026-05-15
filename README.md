@@ -71,3 +71,12 @@ erased.
 
 See [Security Notes](SECURITY.md) before exposing the device beyond a trusted
 LAN.
+
+## License
+
+This repository's original firmware, documentation, and diagrams are licensed
+under the MIT License. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+Third-party Arduino libraries remain under their own licenses. Uploaded chime
+sounds are user-provided content and are not covered by this repository's
+license.

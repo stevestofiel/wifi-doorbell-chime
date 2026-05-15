@@ -1,0 +1,22 @@
+WiFi Doorbell Chime
+Copyright (c) 2026 Steve Stofiel
+
+This repository's original firmware, documentation, and diagrams are licensed
+under the MIT License. See LICENSE.
+
+Third-party dependencies are not vendored in this repository. They are installed
+through the Arduino environment and remain under their own licenses:
+
+- Arduino core for ESP32
+- WiFiManager
+- ESPAsyncWebServer
+- AsyncTCP
+- ArduinoJson
+- ESP8266Audio
+
+The embedded startup sound in boot_mp3.h is part of this repository. If it is
+replaced with audio from another source, keep that source's license and
+attribution with the replacement file.
+
+Sounds uploaded to the device at runtime are user-provided content and are not
+covered by this repository's license.

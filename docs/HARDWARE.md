@@ -1,3 +1,5 @@
+<!-- SPDX-License-Identifier: MIT -->
+
 # Hardware Diagrams
 
 These diagrams are based on the current prototype photos and the firmware pin
