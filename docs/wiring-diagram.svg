@@ -1,71 +1,109 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 700" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 820" role="img" aria-labelledby="title desc">
   <title id="title">WiFi Doorbell Chime wiring diagram</title>
-  <desc id="desc">Simplified wiring diagram showing ESP32-S3 to MAX98357A I2S amplifier, speaker, button, and USB power.</desc>
+  <desc id="desc">Pin-level wiring diagram for ESP32-S3, MAX98357A amplifier, speaker, button, and USB power.</desc>
   <defs>
-    <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#334155"/></marker>
     <style>
-      .bg{fill:#f8fafc}.box{fill:#fff;stroke:#cbd5e1;stroke-width:2}.esp{fill:#e0f2fe;stroke:#0369a1;stroke-width:3}.amp{fill:#ecfccb;stroke:#65a30d;stroke-width:3}.power{fill:#ffedd5;stroke:#ea580c;stroke-width:3}.speaker{fill:#111827;stroke:#111827}.cone{fill:#e5e7eb;stroke:#94a3b8;stroke-width:3}.label{font:700 24px system-ui,sans-serif;fill:#0f172a}.small{font:17px system-ui,sans-serif;fill:#334155}.pin{font:600 15px ui-monospace,monospace;fill:#0f172a}.wire{fill:none;stroke:#2563eb;stroke-width:4;marker-end:url(#arrow)}.red{stroke:#dc2626}.black{stroke:#111827}.green{stroke:#16a34a}.orange{stroke:#f97316}.note{fill:#fff7ed;stroke:#fb923c;stroke-width:2}
+      .page{fill:#f8fafc}
+      .title{font:700 30px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#0f172a}
+      .sub{font:17px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#475569}
+      .h{font:700 21px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#0f172a}
+      .t{font:15px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#334155}
+      .mono{font:600 15px ui-monospace,SFMono-Regular,Menlo,monospace;fill:#0f172a}
+      .box{fill:#fff;stroke:#cbd5e1;stroke-width:2}
+      .esp{fill:#eff6ff;stroke:#2563eb;stroke-width:2.5}
+      .amp{fill:#f0fdf4;stroke:#16a34a;stroke-width:2.5}
+      .warn{fill:#fff7ed;stroke:#f97316;stroke-width:2}
+      .pin{fill:#fff;stroke:#94a3b8;stroke-width:1.5}
+      .sig{stroke:#2563eb;stroke-width:3;fill:none}
+      .pwr{stroke:#dc2626;stroke-width:3;fill:none}
+      .gnd{stroke:#111827;stroke-width:3;fill:none}
+      .btn{stroke:#7c3aed;stroke-width:3;fill:none}
+      .spk{stroke:#16a34a;stroke-width:3;fill:none}
     </style>
   </defs>
-  <rect class="bg" width="1120" height="700"/>
-  <text x="40" y="55" class="label">Simplified Wiring Diagram</text>
-  <text x="40" y="84" class="small">Pin assignments come from the firmware. Verify physical power routing before reproducing.</text>
 
-  <rect x="70" y="150" width="260" height="360" rx="18" class="esp"/>
-  <text x="105" y="195" class="label">ESP32-S3</text>
-  <text x="112" y="225" class="small">Super Mini</text>
-  <text x="95" y="285" class="pin">GPIO4  BCLK</text>
-  <text x="95" y="325" class="pin">GPIO5  LRCLK</text>
-  <text x="95" y="365" class="pin">GPIO6  DOUT</text>
-  <text x="95" y="420" class="pin">GPIO13 BUTTON</text>
-  <text x="95" y="460" class="pin">GND</text>
-  <text x="95" y="500" class="pin">5V/VBUS or 3V3</text>
+  <rect class="page" width="1280" height="820"/>
+  <text x="48" y="58" class="title">Wiring Diagram</text>
+  <text x="48" y="88" class="sub">Authoritative firmware pin mapping. Confirm physical power rail before duplicating the build.</text>
 
-  <rect x="475" y="160" width="260" height="260" rx="18" class="amp"/>
-  <text x="515" y="205" class="label">MAX98357A</text>
-  <text x="530" y="235" class="small">I2S mono amp</text>
-  <text x="505" y="285" class="pin">BCLK</text>
-  <text x="505" y="325" class="pin">LRC</text>
-  <text x="505" y="365" class="pin">DIN</text>
-  <text x="650" y="285" class="pin">VIN</text>
-  <text x="650" y="325" class="pin">GND</text>
-  <text x="650" y="365" class="pin">SPK+ / SPK-</text>
+  <rect x="60" y="135" width="340" height="520" rx="16" class="esp"/>
+  <text x="95" y="180" class="h">ESP32-S3 Super Mini</text>
+  <text x="95" y="210" class="t">USB-powered development board</text>
 
-  <circle cx="930" cy="280" r="82" class="speaker"/>
-  <circle cx="930" cy="280" r="54" class="cone"/>
-  <text x="865" y="405" class="label">Speaker</text>
-  <text x="850" y="435" class="small">8 ohm / 3 W shown</text>
+  <rect x="105" y="255" width="250" height="42" rx="6" class="pin"/>
+  <text x="125" y="282" class="mono">GPIO4  I2S BCLK</text>
+  <rect x="105" y="315" width="250" height="42" rx="6" class="pin"/>
+  <text x="125" y="342" class="mono">GPIO5  I2S LRCLK</text>
+  <rect x="105" y="375" width="250" height="42" rx="6" class="pin"/>
+  <text x="125" y="402" class="mono">GPIO6  I2S DOUT</text>
+  <rect x="105" y="455" width="250" height="42" rx="6" class="pin"/>
+  <text x="125" y="482" class="mono">GPIO13 BUTTON</text>
+  <rect x="105" y="515" width="250" height="42" rx="6" class="pin"/>
+  <text x="125" y="542" class="mono">GND</text>
+  <rect x="105" y="575" width="250" height="42" rx="6" class="pin"/>
+  <text x="125" y="602" class="mono">5V/VBUS or 3V3</text>
 
-  <rect x="475" y="495" width="260" height="92" rx="18" class="box"/>
-  <text x="515" y="535" class="label">Play Button</text>
-  <text x="500" y="565" class="small">GPIO13 to GND, internal pull-up</text>
+  <rect x="560" y="170" width="310" height="330" rx="16" class="amp"/>
+  <text x="595" y="215" class="h">MAX98357A I2S Amp</text>
+  <text x="595" y="245" class="t">Mono class-D amplifier module</text>
+  <rect x="600" y="285" width="110" height="36" rx="6" class="pin"/>
+  <text x="625" y="309" class="mono">BCLK</text>
+  <rect x="600" y="337" width="110" height="36" rx="6" class="pin"/>
+  <text x="632" y="361" class="mono">LRC</text>
+  <rect x="600" y="389" width="110" height="36" rx="6" class="pin"/>
+  <text x="632" y="413" class="mono">DIN</text>
+  <rect x="735" y="285" width="95" height="36" rx="6" class="pin"/>
+  <text x="760" y="309" class="mono">VIN</text>
+  <rect x="735" y="337" width="95" height="36" rx="6" class="pin"/>
+  <text x="759" y="361" class="mono">GND</text>
+  <rect x="735" y="409" width="95" height="36" rx="6" class="pin"/>
+  <text x="753" y="433" class="mono">SPK+</text>
+  <rect x="735" y="455" width="95" height="36" rx="6" class="pin"/>
+  <text x="753" y="479" class="mono">SPK-</text>
 
-  <rect x="810" y="505" width="240" height="82" rx="18" class="power"/>
-  <text x="855" y="545" class="label">USB-C Power</text>
-  <text x="840" y="573" class="small">via ESP32 USB-C cable</text>
+  <rect x="985" y="260" width="190" height="170" rx="16" class="box"/>
+  <text x="1030" y="305" class="h">Speaker</text>
+  <text x="1025" y="335" class="t">8 ohm / 3 W</text>
+  <circle cx="1080" cy="382" r="34" fill="#111827"/>
+  <circle cx="1080" cy="382" r="20" fill="#e5e7eb" stroke="#94a3b8" stroke-width="2"/>
 
-  <path d="M330 280 H475" class="wire"/>
-  <path d="M330 320 H475" class="wire green"/>
-  <path d="M330 360 H475" class="wire orange"/>
-  <text x="365" y="270" class="pin">GPIO4 -> BCLK</text>
-  <text x="365" y="310" class="pin">GPIO5 -> LRC</text>
-  <text x="365" y="350" class="pin">GPIO6 -> DIN</text>
+  <rect x="560" y="585" width="310" height="100" rx="16" class="box"/>
+  <text x="620" y="628" class="h">Manual Play Button</text>
+  <text x="610" y="658" class="t">Momentary switch: GPIO13 to GND</text>
 
-  <path d="M330 500 C390 500, 390 285, 475 285" class="wire red"/>
-  <path d="M330 460 C395 460, 395 325, 475 325" class="wire black"/>
-  <text x="355" y="470" class="pin">Power and ground</text>
+  <rect x="985" y="560" width="190" height="100" rx="16" class="box"/>
+  <text x="1025" y="603" class="h">USB-C</text>
+  <text x="1018" y="633" class="t">Power/programming</text>
 
-  <path d="M735 365 C790 365, 825 315, 855 295" class="wire black"/>
-  <path d="M735 382 C790 382, 825 360, 862 335" class="wire red"/>
-  <text x="775" y="360" class="pin">Amp speaker outputs only</text>
+  <path d="M355 276 H600" class="sig"/>
+  <path d="M355 336 H600" class="sig"/>
+  <path d="M355 396 H600" class="sig"/>
+  <text x="430" y="266" class="mono">GPIO4 -> BCLK</text>
+  <text x="430" y="326" class="mono">GPIO5 -> LRC</text>
+  <text x="430" y="386" class="mono">GPIO6 -> DIN</text>
 
-  <path d="M330 420 C400 420, 410 535, 475 535" class="wire green"/>
-  <path d="M330 460 C400 460, 410 565, 475 565" class="wire black"/>
+  <path d="M355 596 H925 V303 H830" class="pwr"/>
+  <path d="M355 536 H900 V355 H830" class="gnd"/>
+  <text x="382" y="568" class="mono">GND shared</text>
+  <text x="382" y="626" class="mono">VIN from chosen rail</text>
 
-  <path d="M930 505 C930 470, 785 480, 735 500" class="wire red"/>
-  <path d="M930 587 C900 620, 400 620, 330 500" class="wire black"/>
+  <path d="M355 476 C455 476 485 635 560 635" class="btn"/>
+  <path d="M355 536 C455 536 485 662 560 662" class="gnd"/>
 
-  <rect x="70" y="555" width="330" height="92" rx="16" class="note"/>
-  <text x="92" y="590" class="label">Important</text>
-  <text x="92" y="620" class="small">Do not connect speaker negative to ground.</text>
+  <path d="M830 427 H985" class="spk"/>
+  <path d="M830 473 C900 473 920 410 985 410" class="spk"/>
+  <text x="880" y="455" class="mono">bridged output</text>
+
+  <path d="M1080 560 C1080 520 1015 510 870 303" class="pwr"/>
+  <path d="M1080 660 C1010 710 440 710 355 536" class="gnd"/>
+
+  <rect x="60" y="690" width="560" height="88" rx="12" class="warn"/>
+  <text x="88" y="724" class="h">Speaker warning</text>
+  <text x="88" y="750" class="t">MAX98357A speaker output is bridged.</text>
+  <text x="88" y="770" class="t">Connect speaker only to SPK+ and SPK-, never to GND.</text>
+
+  <rect x="660" y="690" width="515" height="88" rx="12" class="warn"/>
+  <text x="688" y="724" class="h">Power note</text>
+  <text x="688" y="750" class="t">Photos do not prove VIN source.</text>
+  <text x="688" y="770" class="t">Verify whether amp VIN is wired to 5V/VBUS or 3V3.</text>
 </svg>

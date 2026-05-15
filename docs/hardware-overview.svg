@@ -1,59 +1,72 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 620" role="img" aria-labelledby="title desc">
-  <title id="title">WiFi Doorbell Chime component overview</title>
-  <desc id="desc">Illustrated component overview for the ESP32-S3 Wi-Fi doorbell chime prototype.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 760" role="img" aria-labelledby="title desc">
+  <title id="title">WiFi Doorbell Chime hardware overview</title>
+  <desc id="desc">Clean block-style overview of the prototype hardware modules.</desc>
   <defs>
     <style>
-      .bg{fill:#f8fafc}.panel{fill:#fff;stroke:#cbd5e1;stroke-width:2}.part{fill:#e0f2fe;stroke:#0369a1;stroke-width:3}.accent{fill:#dbeafe;stroke:#2563eb;stroke-width:3}.amp{fill:#ecfccb;stroke:#65a30d;stroke-width:3}.speaker{fill:#111827}.cone{fill:#e5e7eb;stroke:#9ca3af;stroke-width:3}.wire{fill:none;stroke:#ef4444;stroke-width:5;stroke-linecap:round}.wire2{fill:none;stroke:#111827;stroke-width:5;stroke-linecap:round}.label{font:600 22px system-ui,sans-serif;fill:#0f172a}.small{font:16px system-ui,sans-serif;fill:#475569}.pin{fill:#facc15;stroke:#92400e;stroke-width:1}.call{fill:#fff7ed;stroke:#fb923c;stroke-width:2}
+      .page{fill:#f8fafc}
+      .title{font:700 30px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#0f172a}
+      .sub{font:17px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#475569}
+      .h{font:700 20px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#0f172a}
+      .t{font:15px system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#334155}
+      .mono{font:600 14px ui-monospace,SFMono-Regular,Menlo,monospace;fill:#0f172a}
+      .panel{fill:#fff;stroke:#cbd5e1;stroke-width:2}
+      .module{fill:#f8fafc;stroke:#64748b;stroke-width:2}
+      .board{fill:#fee2e2;stroke:#dc2626;stroke-width:2}
+      .esp{fill:#dbeafe;stroke:#2563eb;stroke-width:2}
+      .amp{fill:#dcfce7;stroke:#16a34a;stroke-width:2}
+      .mech{fill:#fef3c7;stroke:#d97706;stroke-width:2}
+      .wire{stroke:#475569;stroke-width:2.5;fill:none}
+      .pin{fill:#facc15;stroke:#a16207;stroke-width:1}
     </style>
   </defs>
-  <rect class="bg" width="1100" height="620"/>
-  <text x="40" y="55" class="label">WiFi Doorbell Chime Prototype Parts</text>
-  <text x="40" y="82" class="small">Based on supplied hardware photos. Shapes are simplified for documentation.</text>
 
-  <rect x="45" y="125" width="320" height="210" rx="18" class="panel"/>
-  <text x="70" y="165" class="label">ElectroCookie proto board</text>
-  <rect x="85" y="195" width="235" height="92" rx="14" fill="#111827"/>
+  <rect class="page" width="1200" height="760"/>
+  <text x="48" y="58" class="title">Hardware Overview</text>
+  <text x="48" y="88" class="sub">Prototype modules shown as documentation blocks. Not a scale drawing.</text>
+
+  <rect x="48" y="126" width="1104" height="548" rx="18" class="panel"/>
+
+  <rect x="105" y="210" width="360" height="300" rx="14" class="board"/>
+  <text x="134" y="252" class="h">ElectroCookie prototype board</text>
+  <text x="134" y="282" class="t">Main assembly carrier</text>
+  <text x="134" y="314" class="t">Holds ESP32-S3, amp module, wiring,</text>
+  <text x="134" y="338" class="t">and power distribution points.</text>
   <g>
-    <circle cx="110" cy="220" r="6" class="pin"/><circle cx="135" cy="220" r="6" class="pin"/><circle cx="160" cy="220" r="6" class="pin"/><circle cx="185" cy="220" r="6" class="pin"/><circle cx="210" cy="220" r="6" class="pin"/><circle cx="235" cy="220" r="6" class="pin"/><circle cx="260" cy="220" r="6" class="pin"/><circle cx="285" cy="220" r="6" class="pin"/>
-    <circle cx="110" cy="248" r="6" class="pin"/><circle cx="135" cy="248" r="6" class="pin"/><circle cx="160" cy="248" r="6" class="pin"/><circle cx="185" cy="248" r="6" class="pin"/><circle cx="210" cy="248" r="6" class="pin"/><circle cx="235" cy="248" r="6" class="pin"/><circle cx="260" cy="248" r="6" class="pin"/><circle cx="285" cy="248" r="6" class="pin"/>
+    <circle cx="150" cy="395" r="6" class="pin"/><circle cx="180" cy="395" r="6" class="pin"/><circle cx="210" cy="395" r="6" class="pin"/><circle cx="240" cy="395" r="6" class="pin"/><circle cx="270" cy="395" r="6" class="pin"/><circle cx="300" cy="395" r="6" class="pin"/><circle cx="330" cy="395" r="6" class="pin"/><circle cx="360" cy="395" r="6" class="pin"/><circle cx="390" cy="395" r="6" class="pin"/>
+    <circle cx="150" cy="425" r="6" class="pin"/><circle cx="180" cy="425" r="6" class="pin"/><circle cx="210" cy="425" r="6" class="pin"/><circle cx="240" cy="425" r="6" class="pin"/><circle cx="270" cy="425" r="6" class="pin"/><circle cx="300" cy="425" r="6" class="pin"/><circle cx="330" cy="425" r="6" class="pin"/><circle cx="360" cy="425" r="6" class="pin"/><circle cx="390" cy="425" r="6" class="pin"/>
   </g>
-  <text x="72" y="315" class="small">Carries ESP32, amp, power, and wiring.</text>
 
-  <rect x="420" y="125" width="250" height="210" rx="18" class="panel"/>
-  <text x="448" y="165" class="label">ESP32-S3 Super Mini</text>
-  <rect x="500" y="195" width="90" height="105" rx="8" class="part"/>
-  <rect x="523" y="205" width="44" height="18" rx="4" fill="#334155"/>
-  <rect x="520" y="250" width="50" height="32" rx="4" fill="#0f172a"/>
-  <g>
-    <circle cx="488" cy="210" r="4" class="pin"/><circle cx="488" cy="235" r="4" class="pin"/><circle cx="488" cy="260" r="4" class="pin"/><circle cx="488" cy="285" r="4" class="pin"/>
-    <circle cx="602" cy="210" r="4" class="pin"/><circle cx="602" cy="235" r="4" class="pin"/><circle cx="602" cy="260" r="4" class="pin"/><circle cx="602" cy="285" r="4" class="pin"/>
-  </g>
-  <text x="447" y="315" class="small">Runs web UI, Wi-Fi, storage, and playback.</text>
+  <rect x="535" y="160" width="240" height="170" rx="12" class="esp"/>
+  <text x="560" y="200" class="h">ESP32-S3 Super Mini</text>
+  <text x="560" y="232" class="t">Wi-Fi, web server, SPIFFS,</text>
+  <text x="560" y="256" class="t">audio decode, I2S output</text>
+  <text x="560" y="292" class="mono">GPIO4/5/6 -> I2S</text>
 
-  <rect x="725" y="125" width="320" height="210" rx="18" class="panel"/>
-  <text x="755" y="165" class="label">MAX98357A I2S amp</text>
-  <rect x="825" y="205" width="115" height="90" rx="8" class="amp"/>
-  <text x="850" y="255" class="small">I2S</text>
-  <text x="765" y="315" class="small">Drives the small speaker from digital audio.</text>
+  <rect x="535" y="386" width="240" height="150" rx="12" class="amp"/>
+  <text x="560" y="426" class="h">MAX98357A amp</text>
+  <text x="560" y="458" class="t">I2S mono amplifier</text>
+  <text x="560" y="482" class="t">drives speaker terminals</text>
+  <text x="560" y="514" class="mono">BCLK / LRC / DIN</text>
 
-  <rect x="45" y="385" width="320" height="170" rx="18" class="panel"/>
-  <text x="70" y="425" class="label">Speaker module</text>
-  <rect x="145" y="440" width="120" height="70" rx="14" fill="#111827"/>
-  <circle cx="205" cy="475" r="42" class="speaker"/>
-  <circle cx="205" cy="475" r="28" class="cone"/>
-  <text x="72" y="535" class="small">Approx. 8 ohm / 3 W module shown in photos.</text>
+  <rect x="845" y="160" width="235" height="150" rx="12" class="module"/>
+  <text x="870" y="200" class="h">Speaker module</text>
+  <text x="870" y="232" class="t">Small enclosed speaker</text>
+  <text x="870" y="256" class="t">shown as 8 ohm / 3 W</text>
+  <circle cx="962" cy="292" r="30" fill="#111827"/>
+  <circle cx="962" cy="292" r="18" fill="#e5e7eb" stroke="#94a3b8" stroke-width="2"/>
 
-  <rect x="420" y="385" width="250" height="170" rx="18" class="panel"/>
-  <text x="448" y="425" class="label">USB-C power</text>
-  <path d="M500 475 C550 425, 610 430, 615 485" class="wire2"/>
-  <rect x="485" y="470" width="70" height="34" rx="8" class="accent"/>
-  <rect x="600" y="476" width="45" height="22" rx="4" fill="#334155"/>
-  <text x="448" y="535" class="small">Short cable routes to rear/top opening.</text>
+  <rect x="845" y="366" width="235" height="170" rx="12" class="mech"/>
+  <text x="870" y="406" class="h">Enclosure + USB</text>
+  <text x="870" y="438" class="t">Cylindrical shell, front grille,</text>
+  <text x="870" y="462" class="t">rear/top USB-C access,</text>
+  <text x="870" y="486" class="t">short USB-C cable</text>
 
-  <rect x="725" y="385" width="320" height="170" rx="18" class="panel"/>
-  <text x="755" y="425" class="label">Cylindrical enclosure</text>
-  <ellipse cx="865" cy="485" rx="105" ry="55" fill="#e5e7eb" stroke="#64748b" stroke-width="3"/>
-  <ellipse cx="865" cy="485" rx="70" ry="36" fill="#cbd5e1" stroke="#64748b" stroke-width="2"/>
-  <rect x="820" y="452" width="90" height="66" rx="8" fill="#111827"/>
-  <text x="755" y="535" class="small">Front grille, internal speaker, rear USB access.</text>
+  <path d="M465 300 H535" class="wire"/>
+  <path d="M465 455 H535" class="wire"/>
+  <path d="M775 455 H845" class="wire"/>
+  <path d="M775 245 H845" class="wire"/>
+  <path d="M655 330 V386" class="wire"/>
+
+  <rect x="105" y="590" width="975" height="48" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+  <text x="130" y="621" class="t">Purpose: this overview identifies the prototype parts. Use the wiring diagram for electrical connections.</text>
 </svg>

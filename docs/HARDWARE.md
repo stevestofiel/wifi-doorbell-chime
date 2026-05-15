@@ -1,8 +1,8 @@
 # Hardware Diagrams
 
 These diagrams are based on the current prototype photos and the firmware pin
-assignments. Verify exact solder connections against the physical build before
-reproducing.
+assignments. They are documentation drawings, not CAD. Verify exact solder
+connections and power rails against the physical build before reproducing.
 
 ## Component Overview
 
@@ -20,6 +20,8 @@ Visible prototype parts:
 ## Wiring
 
 ![Wiring diagram](wiring-diagram.svg)
+
+Treat this as the primary technical diagram.
 
 Firmware pin assignments:
 
