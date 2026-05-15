@@ -1,0 +1,73 @@
+# WiFi Doorbell Chime
+
+ESP32-S3 Wi-Fi chime that plays uploaded WAV/MP3 sounds from a local web UI and
+simple HTTP playback URLs.
+
+## Features
+
+- Local Home and Manage pages over HTTP
+- WAV/MP3 chime library stored in SPIFFS
+- Stable key-based playback URLs for automations
+- Captive portal provisioning with WiFiManager
+- Editable device label for mDNS, such as `doorbell-front.local`
+- Wi-Fi reconnect watchdog for temporary network outages
+- Optional admin password for management actions
+
+## Hardware
+
+The current prototype uses an ESP32-S3 Super Mini, MAX98357A I2S amplifier,
+small speaker, ElectroCookie prototype board, USB-C power, and a cylindrical
+enclosure.
+
+See [Hardware Diagrams](docs/HARDWARE.md) for component, wiring, and enclosure
+layout diagrams.
+
+## Build
+
+Recommended Arduino settings:
+
+- Board: `ESP32S3 Dev Module`
+- Partition Scheme: `No OTA (2MB APP/2MB SPIFFS)`
+- USB CDC On Boot: `Enabled`
+- Erase All Flash Before Sketch Upload: `Disabled`
+
+Required libraries:
+
+- WiFiManager
+- ESPAsyncWebServer
+- AsyncTCP
+- ArduinoJson
+- ESP8266Audio
+
+Compile with Arduino CLI:
+
+```sh
+arduino-cli compile --fqbn esp32:esp32:esp32s3:PartitionScheme=no_ota,CDCOnBoot=cdc .
+```
+
+Upload:
+
+```sh
+arduino-cli upload -p /dev/cu.usbmodem11401 --fqbn esp32:esp32:esp32s3:PartitionScheme=no_ota,CDCOnBoot=cdc .
+```
+
+## Provisioning
+
+On first boot, or after Wi-Fi reset, the device starts a captive portal:
+
+- SSID: `DoorbellChimeSetup`
+- Password: `config123`
+
+Development uploads preserve saved Wi-Fi, sounds, and settings when flash is not
+erased.
+
+## HTTP Endpoints
+
+- `GET /chime` plays the active chime
+- `GET /play?key=<stable_key>` plays a specific sound
+- `GET /list` returns uploaded sounds and stable keys
+- `GET /status` returns Wi-Fi, storage, active sound, gain, and security status
+- `GET /upload` opens the Manage page
+
+See [Security Notes](SECURITY.md) before exposing the device beyond a trusted
+LAN.
