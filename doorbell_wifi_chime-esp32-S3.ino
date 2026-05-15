@@ -1162,6 +1162,11 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     .security-row {display:flex; gap:0.4rem; align-items:center; margin-top:0.5rem;}
     .security-row input[type=password] {flex:1; border:1px solid #d1d5db; border-radius:8px; padding:0.45rem 0.55rem; font-size:0.9rem;}
     .security-row button {width:auto; min-width:auto; margin:0; padding:0.5rem 0.9rem; font-size:0.9rem; border-radius:8px;}
+    .security-notice {display:none; margin-top:0.75rem; padding:0.75rem; border:1px solid #f59e0b; background:#fffbeb; border-radius:8px; color:#78350f; font-size:0.86rem;}
+    .security-notice .notice-actions {display:flex; gap:0.5rem; margin-top:0.65rem;}
+    .security-notice button {width:auto; min-width:auto; margin:0; padding:0.45rem 0.75rem; font-size:0.85rem; border-radius:8px;}
+    .security-notice .notice-secondary {background:transparent; color:#92400e; border:1px solid rgba(146,64,14,0.4);}
+    .security-notice .notice-secondary:hover:not(:disabled) {background:rgba(245,158,11,0.12);}
     .check-row {display:flex; gap:0.45rem; align-items:center; margin-top:0.55rem; font-size:0.85rem; color:#374151;}
     .check-row input {width:auto;}
     .btn-secondary {background:#64748b;}
@@ -1358,16 +1363,23 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     <div class="section">
       <h2>Security</h2>
       <div class="network-box">
-        <div class="network-title">Shared Token</div>
+        <div class="network-title">Admin Password</div>
         <div class="security-row">
-          <input id="tokenInput" type="password" value="" maxlength="64" placeholder="leave empty to disable">
-          <button id="saveSecurityBtn" type="button">Save Token</button>
+          <input id="tokenInput" type="password" value="" maxlength="64" placeholder="optional password">
+          <button id="saveSecurityBtn" type="button">Save Password</button>
         </div>
         <label class="check-row">
           <input id="playbackAuthInput" type="checkbox">
-          Require token for playback URLs
+          Require password for playback URLs
         </label>
-        <div class="network-help" id="securityState">Token auth disabled</div>
+        <div class="network-help" id="securityState">No admin password set</div>
+        <div class="security-notice" id="securityNotice">
+          Anyone on this Wi-Fi network can manage sounds and settings.
+          <div class="notice-actions">
+            <button id="addPasswordBtn" type="button">Add Password</button>
+            <button id="dismissSecurityBtn" class="notice-secondary" type="button">Not Now</button>
+          </div>
+        </div>
       </div>
     </div>
     <div class="danger">
@@ -1407,8 +1419,12 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     const saveSecurityBtn = document.getElementById('saveSecurityBtn');
     const playbackAuthInput = document.getElementById('playbackAuthInput');
     const securityState = document.getElementById('securityState');
+    const securityNotice = document.getElementById('securityNotice');
+    const addPasswordBtn = document.getElementById('addPasswordBtn');
+    const dismissSecurityBtn = document.getElementById('dismissSecurityBtn');
     let maxBytes = 3000 * 1024;
     let authToken = localStorage.getItem('doorbellAuthToken') || '';
+    let securityNoticeDismissed = sessionStorage.getItem('doorbellSecurityNoticeDismissed') === '1';
 
     function withToken(url) {
       if (!authToken) return url;
@@ -1422,11 +1438,18 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     }
 
     function promptForToken() {
-      const token = prompt('Enter shared token for this chime');
+      const token = prompt('Enter admin password for this chime');
       if (token === null) return false;
       rememberToken(token);
       if (tokenInput) tokenInput.value = '';
       return !!authToken;
+    }
+
+    function updateSecurityUi(authEnabled) {
+      securityState.textContent = authEnabled ? 'Admin password enabled' : 'No admin password set';
+      if (securityNotice) {
+        securityNotice.style.display = (!authEnabled && !securityNoticeDismissed) ? 'block' : 'none';
+      }
     }
 
     function fetchAuth(url, options = {}, retry = true) {
@@ -1512,7 +1535,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           document.write(xhr.responseText);
           document.close();
         } else if (xhr.status === 403 && promptForToken()) {
-          progressText.textContent = 'Token saved. Tap Upload again.';
+          progressText.textContent = 'Password saved. Tap Upload again.';
         } else {
           progressText.textContent = `Upload failed (${xhr.status})`;
         }
@@ -1570,7 +1593,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           mdnsHost.textContent = s.mdns || 'doorbell.local';
           labelInput.value = (s.deviceLabel ?? labelInput.value ?? '');
           playbackAuthInput.checked = !!s.playbackAuth;
-          securityState.textContent = s.authEnabled ? 'Token auth enabled' : 'Token auth disabled';
+          updateSecurityUi(!!s.authEnabled);
           const gain = Number(s.gain ?? 1);
           if (document.activeElement !== gainSlider) {
             gainSlider.value = Math.round(gain * 100);
@@ -1694,11 +1717,13 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       .then(resp => {
         rememberToken(newToken);
         tokenInput.value = '';
-        securityState.textContent = resp.authEnabled ? 'Token auth enabled' : 'Token auth disabled';
+        securityNoticeDismissed = false;
+        sessionStorage.removeItem('doorbellSecurityNoticeDismissed');
+        updateSecurityUi(!!resp.authEnabled);
       })
       .catch(() => {
         rememberToken(previousToken);
-        securityState.textContent = 'Token save failed';
+        securityState.textContent = 'Password save failed';
       });
     }
 
@@ -1721,6 +1746,15 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     });
     resetWifiBtn.addEventListener('click', resetWiFi);
     saveSecurityBtn.addEventListener('click', saveSecurity);
+    addPasswordBtn.addEventListener('click', () => {
+      tokenInput.focus();
+      tokenInput.scrollIntoView({block: 'center', behavior: 'smooth'});
+    });
+    dismissSecurityBtn.addEventListener('click', () => {
+      securityNoticeDismissed = true;
+      sessionStorage.setItem('doorbellSecurityNoticeDismissed', '1');
+      updateSecurityUi(false);
+    });
 
     // Init
     uploadBtn.disabled = true;

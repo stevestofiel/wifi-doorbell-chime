@@ -11,21 +11,13 @@ such as UniFi Protect, to reach it.
 
 ## Admin Password
 
-The user-facing UI should describe this as an admin or management password, not
-as a token. "Token" is still an accurate implementation detail, but "Admin
-Password" gives end users a clearer mental model.
+The Manage page describes the security control as an admin password. Internally,
+the firmware stores and checks a shared token, but the user-facing language is
+intended to be familiar to non-technical users.
 
-Recommended user-facing copy:
-
-- Setting label: "Admin Password"
-- Placeholder: "optional password"
-- Button: "Save Password"
-- Enabled status: "Admin password enabled"
-- Disabled status: "No admin password set"
-- Prompt: "Enter admin password for this chime"
-
-If no admin password is configured, the Manage page should make the tradeoff
-clear: anyone on the same Wi-Fi network can manage sounds and settings.
+If no admin password is configured, the Manage page warns that anyone on the
+same Wi-Fi network can manage sounds and settings. This is convenient for
+development, but a password is recommended on shared or less trusted networks.
 
 ## Shared Token Internals
 
@@ -42,8 +34,8 @@ management actions require that token:
 - reset Wi-Fi
 
 Playback URLs remain open by default for easier webhook integration. Enable
-"Require token for playback URLs" on the Manage page if you want `/chime`,
-`/play?key=...`, and numeric playback URLs to require the same token.
+"Require password for playback URLs" on the Manage page if you want `/chime`,
+`/play?key=...`, and numeric playback URLs to require the same internal token.
 
 Example token-protected playback URL:
 
@@ -53,18 +45,15 @@ http://<chime-ip>/play?key=<stable_key>&token=<shared_token>
 
 ## Development Uploads
 
-Normal Arduino uploads preserve Wi-Fi and token settings because they do not
+Normal Arduino uploads preserve Wi-Fi and password settings because they do not
 erase NVS/SPIFFS. Keep "Erase All Flash Before Sketch Upload" disabled unless
 you intentionally want to clear local device state.
 
-## TODO
+## Recovery
 
-- Rename the Manage page security UI from "Shared Token" to "Admin Password"
-  while keeping the internal token mechanism.
-- Add a first-run warning when no admin password is set, with clear actions to
-  add a password or continue without one.
-- Document recovery for forgotten admin passwords. Today, physical USB access
-  can clear auth by compiling once with `CLEAR_AUTH_ON_BOOT=1`, then flashing
-  the normal firmware again.
-- Consider a physical recovery gesture, such as holding the device button during
-  boot to clear only the admin password.
+Forgotten admin passwords can be cleared with physical USB access by compiling
+once with `CLEAR_AUTH_ON_BOOT=1`, flashing that recovery build, then flashing
+the normal firmware again.
+
+Future improvement: consider a physical recovery gesture, such as holding the
+device button during boot to clear only the admin password.
