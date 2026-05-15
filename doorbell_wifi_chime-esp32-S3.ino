@@ -16,6 +16,10 @@
 #include "AudioOutputI2S.h"
 #include "boot_mp3.h"
 
+#ifndef CLEAR_AUTH_ON_BOOT
+#define CLEAR_AUTH_ON_BOOT 0
+#endif
+
 // ── Globals ────────────────────────────────────────────────────────────────
 AudioGeneratorWAV *wav = nullptr;
 AudioGeneratorMP3 *mp3 = nullptr;
@@ -1859,6 +1863,14 @@ void setup() {
 
   loadSoundsConfig();
   loadDeviceConfig();
+#if CLEAR_AUTH_ON_BOOT
+  if (authToken.length() > 0 || playbackAuth) {
+    authToken = "";
+    playbackAuth = false;
+    saveDeviceConfig(deviceLabel);
+    Serial.println("[RECOVERY] Cleared shared token and playback auth");
+  }
+#endif
 
   WiFiManager wifiManager;
   wifiManager.setSaveConfigCallback(onConfigSaved);
