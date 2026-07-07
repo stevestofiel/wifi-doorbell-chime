@@ -7,11 +7,11 @@ simple HTTP playback URLs.
 
 - Local Home and Manage pages over HTTP
 - WAV/MP3 chime library stored in SPIFFS
-- Stable key-based playback URLs for automations
+- Stable sound-ID playback URLs for automations
 - Captive portal provisioning with WiFiManager
 - Editable device label for mDNS, such as `doorbell-front.local`
 - Wi-Fi reconnect watchdog for temporary network outages
-- Optional admin password for management actions
+- Optional LAN admin password for management actions
 
 ## Hardware
 
@@ -64,13 +64,15 @@ erased.
 ## HTTP Endpoints
 
 - `GET /chime` plays the active chime
-- `GET /play?key=<stable_key>` plays a specific sound
-- `GET /list` returns uploaded sounds and stable keys
+- `GET /play?key=<sound_id>` plays a specific sound
+- `GET /list` returns uploaded sounds and stable sound IDs
 - `GET /status` returns Wi-Fi, storage, active sound, gain, and security status
 - `GET /upload` opens the Manage page
 
-See [Security Notes](SECURITY.md) before exposing the device beyond a trusted
-LAN.
+Playback sound IDs are stable identifiers, not secrets. The optional admin
+password is intended as a local-network guard for management actions; it is not
+a substitute for HTTPS or network isolation. See [Security Notes](SECURITY.md)
+before exposing the device beyond a trusted LAN.
 
 ## License
 

@@ -1170,6 +1170,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     .security-notice button {width:auto; min-width:auto; margin:0; padding:0.45rem 0.75rem; font-size:0.85rem; border-radius:8px;}
     .security-notice .notice-secondary {background:transparent; color:#92400e; border:1px solid rgba(146,64,14,0.4);}
     .security-notice .notice-secondary:hover:not(:disabled) {background:rgba(245,158,11,0.12);}
+    .security-explain {margin-top:0.55rem; font-size:0.78rem; line-height:1.35; color:#6b7280;}
     .check-row {display:flex; gap:0.45rem; align-items:center; margin-top:0.55rem; font-size:0.85rem; color:#374151;}
     .check-row input {width:auto;}
     .btn-secondary {background:#64748b;}
@@ -1366,16 +1367,17 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     <div class="section">
       <h2>Security</h2>
       <div class="network-box">
-        <div class="network-title">Admin Password</div>
+        <div class="network-title">LAN Admin Password</div>
         <div class="security-row">
-          <input id="tokenInput" type="password" value="" maxlength="64" placeholder="optional password">
+          <input id="tokenInput" type="password" value="" maxlength="64" placeholder="optional LAN password">
           <button id="saveSecurityBtn" type="button">Save Password</button>
         </div>
+        <div class="security-explain">Protects management actions on your local network. This page uses HTTP, so do not reuse an important password.</div>
         <label class="check-row">
           <input id="playbackAuthInput" type="checkbox">
-          Require password for playback URLs
+          Require admin password for playback URLs
         </label>
-        <div class="network-help" id="securityState">No admin password set</div>
+        <div class="network-help" id="securityState">No LAN admin password set</div>
         <div class="security-notice" id="securityNotice">
           Anyone on this Wi-Fi network can manage sounds and settings.
           <div class="notice-actions">
@@ -1441,7 +1443,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     }
 
     function promptForToken() {
-      const token = prompt('Enter admin password for this chime');
+      const token = prompt('Enter LAN admin password for this chime');
       if (token === null) return false;
       rememberToken(token);
       if (tokenInput) tokenInput.value = '';
@@ -1449,7 +1451,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     }
 
     function updateSecurityUi(authEnabled) {
-      securityState.textContent = authEnabled ? 'Admin password enabled' : 'No admin password set';
+      securityState.textContent = authEnabled ? 'LAN admin password enabled' : 'No LAN admin password set';
       if (securityNotice) {
         securityNotice.style.display = (!authEnabled && !securityNoticeDismissed) ? 'block' : 'none';
       }
