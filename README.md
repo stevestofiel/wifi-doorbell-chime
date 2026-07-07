@@ -10,6 +10,7 @@ simple HTTP playback URLs.
 - Stable sound-ID playback URLs for automations
 - Captive portal provisioning with WiFiManager
 - Editable device label for mDNS, such as `doorbell-front.local`
+- Advanced LAN DNS suffix option for webhook-friendly names
 - Wi-Fi reconnect watchdog for temporary network outages
 - Optional LAN admin password for management actions
 
@@ -60,6 +61,12 @@ On first boot, or after Wi-Fi reset, the device starts a captive portal:
 
 Development uploads preserve saved Wi-Fi, sounds, and settings when flash is not
 erased.
+
+The device advertises a DHCP hostname based on its label, such as
+`doorbell-front`. The Manage page also includes an advanced LAN DNS option for
+systems such as UniFi Protect that may not resolve mDNS `.local` names. LAN DNS
+is off by default because your router or local DNS server must resolve that name
+for it to work.
 
 ## HTTP Endpoints
 

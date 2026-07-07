@@ -47,6 +47,7 @@ String      uploadError      = "";
 String      uploadTargetPath = "";
 String      uploadDisplayName = "";
 String      deviceLabel      = "";
+String      lanDnsSuffix     = "";
 String      authToken        = "";
 bool        playbackAuth     = false;
 String      mdnsName         = "doorbell";
@@ -68,6 +69,11 @@ String buildMdnsName(const String &label) {
   String name = "doorbell";
   if (label.length() > 0) name += "-" + label;
   return name;
+}
+
+String buildLanDnsHost(const String &host, const String &suffix) {
+  if (suffix.length() == 0) return "";
+  return host + "." + suffix;
 }
 
 bool startMdnsNow(const String &name) {
@@ -100,6 +106,27 @@ String sanitizeToken(const String &input) {
     }
     if (out.length() >= 64) break;
   }
+  return out;
+}
+
+String sanitizeLanDnsSuffix(const String &input) {
+  String out;
+  out.reserve(48);
+  bool lastWasDot = true;
+  for (size_t i = 0; i < input.length(); ++i) {
+    char c = input[i];
+    if (c >= 'A' && c <= 'Z') c = c - 'A' + 'a';
+    bool allowed = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-';
+    if (allowed) {
+      out += c;
+      lastWasDot = false;
+    } else if (c == '.' && !lastWasDot && out.length() > 0) {
+      out += c;
+      lastWasDot = true;
+    }
+    if (out.length() >= 48) break;
+  }
+  while (out.endsWith(".")) out.remove(out.length() - 1);
   return out;
 }
 
@@ -192,7 +219,7 @@ void handleStatus(AsyncWebServerRequest *request) {
   size_t freeBytes = totalBytes >= usedBytes ? (totalBytes - usedBytes) : 0;
   int usedPct = totalBytes ? int((usedBytes * 100) / totalBytes) : 0;
 
-  StaticJsonDocument<256> doc;
+  StaticJsonDocument<768> doc;
   doc["rssi"] = rssi;
   doc["signalPct"] = signalPct;
   doc["fsTotalKB"] = totalBytes / 1024.0;
@@ -201,6 +228,8 @@ void handleStatus(AsyncWebServerRequest *request) {
   doc["wifi"] = (WiFi.status() == WL_CONNECTED) ? "connected" : "disconnected";
   doc["ip"] = WiFi.isConnected() ? WiFi.localIP().toString() : "";
   doc["mdns"] = buildMdnsName(deviceLabel) + ".local";
+  doc["lanDns"] = buildLanDnsHost(buildMdnsName(deviceLabel), lanDnsSuffix);
+  doc["lanDnsSuffix"] = lanDnsSuffix;
   doc["deviceLabel"] = deviceLabel;
   doc["gain"] = currentGain;
   doc["activeName"] = displayFilename;
@@ -601,13 +630,14 @@ void saveSoundsConfig(const String &activePath, const String &activeName) {
 
 void loadDeviceConfig() {
   deviceLabel = "";
+  lanDnsSuffix = "";
   authToken = "";
   playbackAuth = false;
   if (!SPIFFS.exists(DEVICE_FILE)) return;
   File f = SPIFFS.open(DEVICE_FILE, "r");
   if (!f) return;
 
-  StaticJsonDocument<256> doc;
+  StaticJsonDocument<512> doc;
   DeserializationError error = deserializeJson(doc, f);
   f.close();
 
@@ -617,14 +647,18 @@ void loadDeviceConfig() {
   if (!error && doc.containsKey("token")) {
     authToken = sanitizeToken(doc["token"].as<String>());
   }
+  if (!error && doc.containsKey("lanDnsSuffix")) {
+    lanDnsSuffix = sanitizeLanDnsSuffix(doc["lanDnsSuffix"].as<String>());
+  }
   if (!error && doc.containsKey("playbackAuth")) {
     playbackAuth = doc["playbackAuth"].as<bool>();
   }
 }
 
 void saveDeviceConfig(const String &label) {
-  StaticJsonDocument<256> doc;
+  StaticJsonDocument<512> doc;
   doc["label"] = label;
+  doc["lanDnsSuffix"] = lanDnsSuffix;
   if (authToken.length() > 0) doc["token"] = authToken;
   doc["playbackAuth"] = playbackAuth;
   File f = SPIFFS.open(DEVICE_FILE, "w");
@@ -778,17 +812,28 @@ void handleSetLabel(AsyncWebServerRequest *request) {
   String newLabel = sanitizeLabel(raw);
   if (newLabel != deviceLabel) {
     deviceLabel = newLabel;
-    saveDeviceConfig(deviceLabel);
   }
 
+  String suffixRaw = lanDnsSuffix;
+  if (request->hasParam("lanDnsSuffix", true)) {
+    suffixRaw = request->getParam("lanDnsSuffix", true)->value();
+  } else if (request->hasParam("lanDnsSuffix")) {
+    suffixRaw = request->getParam("lanDnsSuffix")->value();
+  }
+  lanDnsSuffix = sanitizeLanDnsSuffix(suffixRaw);
+  saveDeviceConfig(deviceLabel);
+
   mdnsName = buildMdnsName(deviceLabel);
+  WiFi.setHostname(mdnsName.c_str());
   if (mdnsOk) MDNS.end();
   startMdnsNow(mdnsName);
 
-  StaticJsonDocument<256> doc;
+  StaticJsonDocument<512> doc;
   doc["ok"] = true;
   doc["label"] = deviceLabel;
   doc["mdns"] = mdnsName + ".local";
+  doc["lanDns"] = buildLanDnsHost(mdnsName, lanDnsSuffix);
+  doc["lanDnsSuffix"] = lanDnsSuffix;
   String payload;
   serializeJson(doc, payload);
   request->send(200, "application/json", payload);
@@ -1194,6 +1239,17 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     .network-row input {flex:1; border:1px solid #d1d5db; border-radius:8px; padding:0.45rem 0.55rem; font-size:0.9rem;}
     .network-row button {width:auto; min-width:auto; margin:0; padding:0.5rem 0.75rem; font-size:0.85rem; line-height:1.1; border-radius:8px; white-space:nowrap;}
     .network-help {margin-top:0.45rem; font-size:0.78rem; color:#6b7280; text-align:left;}
+    .save-state {margin-top:0.45rem; min-height:1rem; font-size:0.78rem; color:#6b7280;}
+    .save-state.error {color:#b91c1c;}
+    .save-state.ok {color:#15803d;}
+    .dns-options {display:grid; gap:0.35rem; margin-top:0.75rem; font-size:0.85rem; color:#374151;}
+    .dns-options label {display:flex; gap:0.45rem; align-items:center;}
+    .dns-options input[type=radio] {width:auto;}
+    .dns-custom {display:grid; grid-template-columns:auto minmax(0, 1fr); gap:0.45rem; align-items:center;}
+    .dns-custom input[type=text] {border:1px solid #d1d5db; border-radius:8px; padding:0.42rem 0.55rem; font-size:0.85rem;}
+    .advanced-box {margin-top:0.75rem; border-top:1px solid #e5e7eb; padding-top:0.65rem;}
+    .advanced-box summary {cursor:pointer; color:#374151; font-size:0.88rem; font-weight:600;}
+    .advanced-body {margin-top:0.65rem;}
     .security-row {display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:0.4rem; align-items:center; margin-top:0.5rem;}
     .security-row input[type=password] {flex:1; border:1px solid #d1d5db; border-radius:8px; padding:0.45rem 0.55rem; font-size:0.9rem;}
     .security-row button {width:auto; min-width:auto; margin:0; padding:0.5rem 0.75rem; font-size:0.85rem; line-height:1.1; border-radius:8px; white-space:nowrap;}
@@ -1358,6 +1414,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       .security-row {display:grid; grid-template-columns:1fr; gap:0.5rem;}
       .network-row button,
       .security-row button {width:100%;}
+      .dns-custom {grid-template-columns:1fr;}
       .back {display:none;}
     }
   </style>
@@ -1366,7 +1423,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
   <div class="card">
     <div class="topbar">
       <h1>Manage Chimes</h1>
-      <a class="home-link" href="/">Home</a>
+      <a class="home-link" href="/" title="Return to the simple chime status and play page">Home</a>
     </div>
     <div class="status">
       <div class="big" id="deviceStatus">Loading…</div>
@@ -1374,6 +1431,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       <div>
         <div class="tiny">IP: <span id="deviceIp">—</span></div>
         <div class="tiny">mDNS: <span id="deviceMdns">doorbell.local</span></div>
+        <div class="tiny" id="deviceLanDnsRow" style="display:none;">LAN DNS: <span id="deviceLanDns">off</span></div>
       </div>
     </div>
 
@@ -1395,10 +1453,10 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     </div>
 
     <div class="tabbar" role="tablist" aria-label="Manage sections">
-      <button class="active" type="button" data-tab="chimes">Chimes</button>
-      <button type="button" data-tab="upload">Upload</button>
-      <button type="button" data-tab="device">Device</button>
-      <button type="button" data-tab="security">Security</button>
+      <button class="active" type="button" data-tab="chimes" title="Select, preview, or delete uploaded chime sounds">Chimes</button>
+      <button type="button" data-tab="upload" title="Upload a new WAV or MP3 chime sound">Upload</button>
+      <button type="button" data-tab="device" title="Adjust volume, device name, Wi-Fi, and advanced network options">Device</button>
+      <button type="button" data-tab="security" title="Set the LAN admin password and manage protected actions">Security</button>
     </div>
 
     <div class="manage-grid">
@@ -1412,10 +1470,10 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           <h2>Upload Sound</h2>
           <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">
             <label for="fileInput" class="prompt">Choose a WAV or MP3 file</label>
-            <input type="file" id="fileInput" name="file" accept=".wav,.mp3" required>
+            <input type="file" id="fileInput" name="file" accept=".wav,.mp3" title="Choose a WAV or MP3 file to upload to the chime" required>
             <div id="fileName"></div>
             <div id="fileSize"></div>
-            <button type="submit" id="uploadBtn" disabled>
+            <button type="submit" id="uploadBtn" title="Upload the selected sound and make it available as a chime" disabled>
               <span class="spin btn-spin" aria-hidden="true"></span>
               <span id="uploadText">Upload</span>
             </button>
@@ -1433,7 +1491,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           <div class="volume-box">
             <div class="slider-container">
               <label>Volume Gain (0.0 – 3.0):</label><br>
-              <input type="range" min="0" max="300" value="100" step="1" id="gainSlider">
+              <input type="range" min="0" max="300" value="100" step="1" id="gainSlider" title="Adjust playback gain from muted to louder output">
               <div id="gainDisplay">1.00</div>
             </div>
           </div>
@@ -1441,11 +1499,29 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           <div class="network-box" style="margin-top:1rem;">
             <div class="network-title">Device Name</div>
             <div class="network-row">
-              <input id="labelInput" type="text" value="" maxlength="24" placeholder="front-door">
-              <button id="saveLabelBtn" type="button">Save</button>
-              <button id="resetWifiBtn" class="btn-secondary" type="button">Reset Wi‑Fi</button>
+              <input id="labelInput" type="text" value="" maxlength="24" placeholder="front-door" title="Short room or location label used in the mDNS name">
+              <button id="saveLabelBtn" type="button" title="Save the device name and advanced LAN DNS setting">Save</button>
+              <button id="resetWifiBtn" class="btn-secondary" type="button" title="Shows a warning, then clears saved Wi-Fi credentials and reboots into setup mode">Reset Wi‑Fi</button>
             </div>
             <div class="network-help">mDNS: <span id="mdnsHost">doorbell.local</span></div>
+            <div class="save-state" id="deviceSaveState"></div>
+            <details class="advanced-box">
+              <summary title="Show optional network settings for users with local DNS configured">Advanced</summary>
+              <div class="advanced-body">
+                <div class="network-title">LAN DNS Name</div>
+                <div class="network-help">LAN DNS: <span id="lanDnsHost">off</span></div>
+                <div class="dns-options">
+                  <label title="Do not show a LAN DNS name; use mDNS or a reserved IP instead"><input type="radio" name="lanDnsSuffix" value="" checked> Off</label>
+                  <label title="Use this only if your router or DNS server resolves .lan names"><input type="radio" name="lanDnsSuffix" value="lan"> .lan</label>
+                  <label title="Standards-friendly home-network DNS suffix; requires router or DNS support"><input type="radio" name="lanDnsSuffix" value="home.arpa"> .home.arpa</label>
+                  <label class="dns-custom">
+                    <span><input id="lanDnsCustomRadio" type="radio" name="lanDnsSuffix" value="custom" title="Use a custom local DNS suffix"> Custom</span>
+                    <input id="lanDnsCustomInput" type="text" maxlength="48" placeholder="iot.lan" title="Custom suffix your router or DNS server resolves, such as iot.lan">
+                  </label>
+                </div>
+                <div class="network-help">For UniFi Protect, use this only if UniFi Network or local DNS resolves the name. Otherwise use a reserved IP address.</div>
+              </div>
+            </details>
           </div>
         </div>
 
@@ -1454,25 +1530,25 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           <div class="network-box">
             <div class="network-title">LAN Admin Password</div>
             <div class="security-row">
-              <input id="tokenInput" type="password" value="" maxlength="64" placeholder="optional LAN password">
-              <button id="saveSecurityBtn" type="button">Save Password</button>
+              <input id="tokenInput" type="password" value="" maxlength="64" placeholder="optional LAN password" title="Optional LAN admin password for management actions">
+              <button id="saveSecurityBtn" type="button" title="Save or clear the LAN admin password and playback protection setting">Save Password</button>
             </div>
             <div class="security-explain">Protects management actions on your local network. This page uses HTTP, so do not reuse an important password.</div>
             <label class="check-row">
-              <input id="playbackAuthInput" type="checkbox">
+              <input id="playbackAuthInput" type="checkbox" title="Require the LAN admin password when triggering playback URLs">
               Require admin password for playback URLs
             </label>
             <div class="network-help" id="securityState">No LAN admin password set</div>
             <div class="security-notice" id="securityNotice">
               Anyone on this Wi-Fi network can manage sounds and settings.
               <div class="notice-actions">
-                <button id="addPasswordBtn" type="button">Add Password</button>
-                <button id="dismissSecurityBtn" class="notice-secondary" type="button">Not Now</button>
+                <button id="addPasswordBtn" type="button" title="Jump to the LAN admin password field">Add Password</button>
+                <button id="dismissSecurityBtn" class="notice-secondary" type="button" title="Hide this warning for this browser session">Not Now</button>
               </div>
             </div>
           </div>
           <div class="danger">
-            <button id="cleanBtn" type="button">Delete All Files</button>
+            <button id="cleanBtn" type="button" title="Shows a warning, then permanently deletes all uploaded sounds">Delete All Files</button>
           </div>
         </div>
       </div>
@@ -1501,6 +1577,8 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     const deviceActive = document.getElementById('deviceActive');
     const deviceIp = document.getElementById('deviceIp');
     const deviceMdns = document.getElementById('deviceMdns');
+    const deviceLanDnsRow = document.getElementById('deviceLanDnsRow');
+    const deviceLanDns = document.getElementById('deviceLanDns');
     const soundList = document.getElementById('soundList');
     const gainSlider = document.getElementById('gainSlider');
     const gainDisplay = document.getElementById('gainDisplay');
@@ -1508,6 +1586,11 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     const saveLabelBtn = document.getElementById('saveLabelBtn');
     const resetWifiBtn = document.getElementById('resetWifiBtn');
     const mdnsHost = document.getElementById('mdnsHost');
+    const lanDnsHost = document.getElementById('lanDnsHost');
+    const deviceSaveState = document.getElementById('deviceSaveState');
+    const lanDnsRadios = Array.from(document.querySelectorAll('input[name="lanDnsSuffix"]'));
+    const lanDnsCustomRadio = document.getElementById('lanDnsCustomRadio');
+    const lanDnsCustomInput = document.getElementById('lanDnsCustomInput');
     const tokenInput = document.getElementById('tokenInput');
     const saveSecurityBtn = document.getElementById('saveSecurityBtn');
     const playbackAuthInput = document.getElementById('playbackAuthInput');
@@ -1571,6 +1654,30 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     function setActiveTab(name) {
       tabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === name));
       tabPanels.forEach(panel => panel.classList.toggle('active', panel.dataset.panel === name));
+    }
+
+    function selectedLanDnsSuffix() {
+      const selected = lanDnsRadios.find(r => r.checked);
+      if (!selected) return '';
+      if (selected.value === 'custom') return lanDnsCustomInput.value.trim();
+      return selected.value;
+    }
+
+    function setLanDnsSuffix(suffix) {
+      const value = (suffix ?? '').trim();
+      const known = lanDnsRadios.find(r => r.value === value);
+      if (known) {
+        known.checked = true;
+        if (value !== 'custom') lanDnsCustomInput.value = '';
+      } else {
+        lanDnsCustomRadio.checked = true;
+        lanDnsCustomInput.value = value;
+      }
+    }
+
+    function setDeviceSaveState(text, kind = '') {
+      deviceSaveState.textContent = text;
+      deviceSaveState.className = kind ? `save-state ${kind}` : 'save-state';
     }
 
     function updateFileInfo() {
@@ -1690,8 +1797,14 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           deviceActive.textContent = activeName;
           deviceIp.textContent = s.ip || 'not connected';
           deviceMdns.textContent = s.mdns || 'doorbell.local';
+          deviceLanDns.textContent = s.lanDns || 'off';
+          deviceLanDnsRow.style.display = s.lanDns ? 'block' : 'none';
           mdnsHost.textContent = s.mdns || 'doorbell.local';
+          lanDnsHost.textContent = s.lanDns || 'off';
           labelInput.value = (s.deviceLabel ?? labelInput.value ?? '');
+          if (document.activeElement !== lanDnsCustomInput) {
+            setLanDnsSuffix(s.lanDnsSuffix ?? '');
+          }
           playbackAuthInput.checked = !!s.playbackAuth;
           updateSecurityUi(!!s.authEnabled);
           const gain = Number(s.gain ?? 1);
@@ -1719,6 +1832,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             radio.type = 'radio';
             radio.name = 'activeSound';
             radio.value = item.path;
+            radio.title = 'Set this sound as the active chime';
             radio.checked = (item.path === s.active);
             radio.addEventListener('change', () => {
               fetchAuth(`/setactive?path=${encodeURIComponent(item.path)}`)
@@ -1731,9 +1845,10 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             });
             const label = document.createElement('label');
             label.textContent = item.name || item.path;
+            label.title = item.path || item.name || 'Uploaded chime sound';
             const play = document.createElement('button');
             play.className = 'play-btn';
-            play.title = 'Play';
+            play.title = 'Preview this sound';
             play.type = 'button';
             play.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
               <path d="M8 5v14l11-7z"/>
@@ -1750,7 +1865,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             });
             const del = document.createElement('button');
             del.className = 'trash-btn';
-            del.title = 'Delete';
+            del.title = 'Shows a warning, then deletes this sound';
             del.type = 'button';
             del.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
               <path d="M3 6h18"/><path d="M8 6V4h8v2"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/>
@@ -1777,8 +1892,12 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         .catch(() => { soundList.textContent = 'Unable to load list.'; });
     }
 
-    function saveLabel() {
-      const body = tokenBody({label: labelInput.value});
+    function saveDeviceSettings(message = 'Saved') {
+      setDeviceSaveState('Saving...');
+      const body = tokenBody({
+        label: labelInput.value,
+        lanDnsSuffix: selectedLanDnsSuffix()
+      });
       fetchAuth('/setlabel', {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
@@ -1793,9 +1912,16 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           labelInput.value = resp.label || '';
           mdnsHost.textContent = resp.mdns || 'doorbell.local';
           deviceMdns.textContent = resp.mdns || 'doorbell.local';
+          lanDnsHost.textContent = resp.lanDns || 'off';
+          deviceLanDns.textContent = resp.lanDns || 'off';
+          deviceLanDnsRow.style.display = resp.lanDns ? 'block' : 'none';
+          setLanDnsSuffix(resp.lanDnsSuffix ?? '');
+          setDeviceSaveState(message, 'ok');
         }
       })
-        .catch(() => {});
+        .catch(err => {
+          setDeviceSaveState(err.message || 'Save failed', 'error');
+        });
     }
 
     function saveSecurity() {
@@ -1837,14 +1963,36 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         .catch(err => alert(err.message || 'Reset failed'));
     }
 
-    saveLabelBtn.addEventListener('click', saveLabel);
+    saveLabelBtn.addEventListener('click', () => saveDeviceSettings());
     labelInput.addEventListener('keydown', e => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        saveLabel();
+        saveDeviceSettings();
       }
     });
     resetWifiBtn.addEventListener('click', resetWiFi);
+    lanDnsCustomInput.addEventListener('focus', () => {
+      lanDnsCustomRadio.checked = true;
+    });
+    lanDnsRadios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        if (radio.value === 'custom') {
+          lanDnsCustomInput.focus();
+          return;
+        }
+        saveDeviceSettings('LAN DNS saved');
+      });
+    });
+    lanDnsCustomInput.addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        lanDnsCustomRadio.checked = true;
+        saveDeviceSettings('LAN DNS saved');
+      }
+    });
+    lanDnsCustomInput.addEventListener('blur', () => {
+      if (lanDnsCustomRadio.checked) saveDeviceSettings('LAN DNS saved');
+    });
     saveSecurityBtn.addEventListener('click', saveSecurity);
     addPasswordBtn.addEventListener('click', () => {
       tokenInput.focus();
@@ -2001,6 +2149,7 @@ void setup() {
 
   loadSoundsConfig();
   loadDeviceConfig();
+  mdnsName = buildMdnsName(deviceLabel);
 #if CLEAR_AUTH_ON_BOOT
   if (authToken.length() > 0 || playbackAuth) {
     authToken = "";
@@ -2019,6 +2168,7 @@ void setup() {
   labelDefault.toCharArray(labelBuf, sizeof(labelBuf));
   WiFiManagerParameter labelParam("label", "Room/Label (e.g. front-door)", labelBuf, 31);
   wifiManager.addParameter(&labelParam);
+  WiFi.setHostname(mdnsName.c_str());
   WiFi.setAutoReconnect(true);
   Serial.println("WiFiManager: starting autoConnect");
   bool wifiOk = wifiManager.autoConnect("DoorbellChimeSetup", "config123");
@@ -2044,6 +2194,7 @@ void setup() {
   }
 
   mdnsName = buildMdnsName(deviceLabel);
+  WiFi.setHostname(mdnsName.c_str());
 
   Serial.print("IP: "); Serial.println(WiFi.localIP());
 

@@ -18,6 +18,11 @@ traffic can capture it. Do not reuse an important password here.
 Playback sound IDs in `/play?key=...` URLs are stable identifiers for sounds,
 not secrets.
 
+The firmware advertises mDNS as `<device>.local` for easy browser discovery. It
+also has an advanced LAN DNS option for automation systems that do not resolve
+mDNS. LAN DNS is off by default and depends on your router or DNS server
+resolving local hostnames.
+
 ## Admin Password
 
 The Manage page describes the security control as a LAN admin password.
