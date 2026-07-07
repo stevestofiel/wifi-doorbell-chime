@@ -1050,7 +1050,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       background: var(--bg);
       color: var(--text);
       margin: 0;
-      padding: 1.5rem 1rem;
+      padding: 1.5rem;
       min-height: 100vh;
       display: flex;
       justify-content: center;
@@ -1058,49 +1058,81 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     }
     .card {
       background: var(--card);
-      border-radius: 16px;
-      padding: 2rem;
+      border-radius: 12px;
+      padding: 1.6rem 1.75rem;
       box-shadow: 0 8px 20px rgba(0,0,0,0.08);
       width: 100%;
-      max-width: 500px;
+      max-width: 1120px;
     }
     h1 {
       color: var(--primary);
       font-size: 1.8rem;
-      margin: 0 0 1.5rem;
-      text-align: center;
+      margin: 0;
+      text-align: left;
       font-weight: 600;
     }
+    .topbar {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      gap:1rem;
+      margin-bottom:1rem;
+    }
+    .home-link {
+      color:var(--primary);
+      text-decoration:none;
+      font-size:0.95rem;
+      font-weight:500;
+      white-space:nowrap;
+      margin-top:0.25rem;
+    }
+    .home-link:hover {text-decoration:underline;}
     .status {
-      text-align: center;
+      display:grid;
+      grid-template-columns:minmax(0, 1fr) auto;
+      gap:0.4rem 1rem;
+      align-items:start;
       margin-bottom: 1rem;
+      padding-bottom:1rem;
+      border-bottom:1px solid #e5e7eb;
     }
     .status .big {
-      font-size: 1.2rem;
+      font-size: 1rem;
       font-weight: 700;
       color: var(--text);
+      grid-column:1 / -1;
     }
     .status .sub {
       color: var(--text-light);
-      margin-top: 0.25rem;
       font-size: 0.95rem;
       word-break: break-word;
     }
     .status .tiny {
       color: #9ca3af;
-      margin-top: 0.2rem;
       font-size: 0.8rem;
+      text-align:right;
     }
-    .info-box {margin:1rem 0; text-align:left;}
+    .metrics-grid {display:grid; grid-template-columns:1fr 1fr; gap:1rem; margin-bottom:1rem;}
+    .info-box {margin:0; text-align:left;}
     .info-row {display:flex; justify-content:space-between; align-items:center; font-size:0.95rem; color:#374151; margin-bottom:0.4rem;}
     .bar {width:100%; height:10px; background:#e5e7eb; border-radius:999px; overflow:hidden;}
     .fill {height:100%; background:#2563eb;}
     .fill.warn {background:#f59e0b;}
     .fill.bad {background:#ef4444;}
+    .tabbar {display:none;}
+    .manage-grid {
+      display:grid;
+      grid-template-columns:minmax(0, 1fr) 360px;
+      gap:1.25rem;
+      align-items:start;
+    }
+    .side-stack {display:grid; gap:1rem;}
     .section {
-      margin-top: 1.25rem;
-      padding-top: 1rem;
-      border-top: 1px solid #e5e7eb;
+      margin: 0;
+      padding: 1rem;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      background:#ffffff;
     }
     .section h2 {
       margin: 0 0 0.8rem;
@@ -1110,7 +1142,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     }
     .list-item {
       display:grid;
-      grid-template-columns:22px minmax(0, 1fr) 44px 44px;
+      grid-template-columns:22px minmax(0, 1fr) 36px 36px;
       align-items:center;
       column-gap:0.2rem;
       min-height:44px;
@@ -1131,7 +1163,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       padding: 0;
       margin: 0;
       height: 44px;
-      width: 44px;
+      width: 36px;
       line-height: 1;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
@@ -1149,7 +1181,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       padding: 0;
       margin: 0;
       height: 44px;
-      width: 44px;
+      width: 36px;
       line-height: 1;
       touch-action: manipulation;
       -webkit-tap-highlight-color: transparent;
@@ -1158,13 +1190,13 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     .play-btn svg { width: 18px; height: 18px; display:block; pointer-events:none; }
     .network-box {text-align:left; background:#f8fafc; border:1px solid #e5e7eb; border-radius:10px; padding:0.8rem;}
     .network-title {font-size:0.9rem; font-weight:600; color:#374151; margin-bottom:0.5rem;}
-    .network-row {display:flex; gap:0.4rem; align-items:center;}
+    .network-row {display:grid; grid-template-columns:minmax(0, 1fr) auto auto; gap:0.4rem; align-items:center;}
     .network-row input {flex:1; border:1px solid #d1d5db; border-radius:8px; padding:0.45rem 0.55rem; font-size:0.9rem;}
-    .network-row button {width:auto; min-width:auto; margin:0; padding:0.5rem 0.9rem; font-size:0.9rem; border-radius:8px;}
+    .network-row button {width:auto; min-width:auto; margin:0; padding:0.5rem 0.75rem; font-size:0.85rem; line-height:1.1; border-radius:8px; white-space:nowrap;}
     .network-help {margin-top:0.45rem; font-size:0.78rem; color:#6b7280; text-align:left;}
-    .security-row {display:flex; gap:0.4rem; align-items:center; margin-top:0.5rem;}
+    .security-row {display:grid; grid-template-columns:minmax(0, 1fr) auto; gap:0.4rem; align-items:center; margin-top:0.5rem;}
     .security-row input[type=password] {flex:1; border:1px solid #d1d5db; border-radius:8px; padding:0.45rem 0.55rem; font-size:0.9rem;}
-    .security-row button {width:auto; min-width:auto; margin:0; padding:0.5rem 0.9rem; font-size:0.9rem; border-radius:8px;}
+    .security-row button {width:auto; min-width:auto; margin:0; padding:0.5rem 0.75rem; font-size:0.85rem; line-height:1.1; border-radius:8px; white-space:nowrap;}
     .security-notice {display:none; margin-top:0.75rem; padding:0.75rem; border:1px solid #f59e0b; background:#fffbeb; border-radius:8px; color:#78350f; font-size:0.86rem;}
     .security-notice .notice-actions {display:flex; gap:0.5rem; margin-top:0.65rem;}
     .security-notice button {width:auto; min-width:auto; margin:0; padding:0.45rem 0.75rem; font-size:0.85rem; border-radius:8px;}
@@ -1175,7 +1207,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     .check-row input {width:auto;}
     .btn-secondary {background:#64748b;}
     .btn-secondary:hover:not(:disabled) {background:#475569;}
-    .volume-box {margin-top: 0.5rem; padding:1rem; background:#f1f5f9; border-radius:8px; text-align:center;}
+    .volume-box {margin-top: 0.5rem; padding:0.8rem; background:#f1f5f9; border-radius:8px; text-align:center;}
     .slider-container {margin:0.4rem 0;}
     input[type=range] {width:90%; max-width:400px; height:12px;}
     #gainDisplay {font-size:1.4em; font-weight:bold; margin:0.5rem 0;}
@@ -1201,9 +1233,9 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       background: var(--primary);
       color: white;
       border: none;
-      padding: 1rem;
-      border-radius: 12px;
-      font-size: 1.2rem;
+      padding: 0.8rem 1rem;
+      border-radius: 10px;
+      font-size: 1rem;
       font-weight: 500;
       cursor: pointer;
       width: 100%;
@@ -1264,7 +1296,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       transition: width 0.15s linear;
     }
     .danger {
-      margin-top: 1.5rem;
+      margin-top: 1rem;
       border-top: 1px solid #e5e7eb;
       padding-top: 1rem;
       text-align: center;
@@ -1289,107 +1321,163 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       font-weight: 500;
     }
     .back a:hover { text-decoration: underline; }
+    @media (max-width: 720px) {
+      body {padding:0.75rem;}
+      .card {padding:1rem; border-radius:10px;}
+      .topbar {align-items:center;}
+      h1 {font-size:1.45rem;}
+      .status {grid-template-columns:1fr;}
+      .status .tiny {text-align:left;}
+      .metrics-grid {grid-template-columns:1fr; gap:0.75rem;}
+      .tabbar {
+        display:grid;
+        grid-template-columns:repeat(4, minmax(0, 1fr));
+        gap:0.35rem;
+        margin:0.5rem 0 1rem;
+      }
+      .tabbar button {
+        width:100%;
+        margin:0;
+        padding:0.55rem 0.35rem;
+        border-radius:8px;
+        background:#e5e7eb;
+        color:#374151;
+        font-size:0.82rem;
+      }
+      .tabbar button.active {
+        background:var(--primary);
+        color:#ffffff;
+      }
+      .manage-grid,
+      .side-stack {display:block;}
+      .tab-panel {display:none;}
+      .tab-panel.active {display:block;}
+      .section {padding:0.9rem;}
+      .section + .section {margin-top:1rem;}
+      .network-row,
+      .security-row {display:grid; grid-template-columns:1fr; gap:0.5rem;}
+      .network-row button,
+      .security-row button {width:100%;}
+      .back {display:none;}
+    }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1>Manage Chimes</h1>
+    <div class="topbar">
+      <h1>Manage Chimes</h1>
+      <a class="home-link" href="/">Home</a>
+    </div>
     <div class="status">
       <div class="big" id="deviceStatus">Loading…</div>
       <div class="sub" id="deviceActive">No chime loaded</div>
-      <div class="tiny">IP: <span id="deviceIp">—</span></div>
-      <div class="tiny">mDNS: <span id="deviceMdns">doorbell.local</span></div>
-    </div>
-
-    <div class="info-box" id="wifiBox">
-      <div class="info-row">
-        <span>Wi‑Fi Signal</span>
-        <span id="wifiText">Loading…</span>
+      <div>
+        <div class="tiny">IP: <span id="deviceIp">—</span></div>
+        <div class="tiny">mDNS: <span id="deviceMdns">doorbell.local</span></div>
       </div>
-      <div class="bar"><div id="wifiBar" class="fill" style="width:0%"></div></div>
     </div>
 
-    <div class="info-box" id="fsBox">
-      <div class="info-row">
-        <span>Available Storage</span>
-        <span id="fsText">Loading…</span>
+    <div class="metrics-grid">
+      <div class="info-box" id="wifiBox">
+        <div class="info-row">
+          <span>Wi‑Fi Signal</span>
+          <span id="wifiText">Loading…</span>
+        </div>
+        <div class="bar"><div id="wifiBar" class="fill" style="width:0%"></div></div>
       </div>
-      <div class="bar"><div id="fsBar" class="fill" style="width:0%"></div></div>
-    </div>
-
-    <div class="section">
-      <h2>Upload New Sound</h2>
-    <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">
-      <label for="fileInput" class="prompt">Choose a WAV or MP3 file</label>
-      <input type="file" id="fileInput" name="file" accept=".wav,.mp3" required>
-      <div id="fileName"></div>
-      <div id="fileSize"></div>
-      <button type="submit" id="uploadBtn" disabled>
-        <span class="spin btn-spin" aria-hidden="true"></span>
-        <span id="uploadText">Upload</span>
-      </button>
-      <div class="progress" id="progressBox" style="display:none;">
-        <div id="progressText">Starting…</div>
-        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="info-box" id="fsBox">
+        <div class="info-row">
+          <span>Available Storage</span>
+          <span id="fsText">Loading…</span>
+        </div>
+        <div class="bar"><div id="fsBar" class="fill" style="width:0%"></div></div>
       </div>
-    </form>
     </div>
 
-    <div class="section">
-      <h2>Available Chimes</h2>
-      <div id="soundList" style="text-align:left;">Loading…</div>
+    <div class="tabbar" role="tablist" aria-label="Manage sections">
+      <button class="active" type="button" data-tab="chimes">Chimes</button>
+      <button type="button" data-tab="upload">Upload</button>
+      <button type="button" data-tab="device">Device</button>
+      <button type="button" data-tab="security">Security</button>
     </div>
 
-    <div class="section">
-      <h2>Volume</h2>
-      <div class="volume-box">
-        <div class="slider-container">
-          <label>Volume Gain (0.0 – 3.0):</label><br>
-          <input type="range" min="0" max="300" value="100" step="1" id="gainSlider">
-          <div id="gainDisplay">1.00</div>
+    <div class="manage-grid">
+      <div class="side-stack">
+        <div class="section tab-panel active" data-panel="chimes">
+          <h2>Chimes</h2>
+          <div id="soundList" style="text-align:left;">Loading…</div>
+        </div>
+
+        <div class="section tab-panel" data-panel="upload">
+          <h2>Upload Sound</h2>
+          <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">
+            <label for="fileInput" class="prompt">Choose a WAV or MP3 file</label>
+            <input type="file" id="fileInput" name="file" accept=".wav,.mp3" required>
+            <div id="fileName"></div>
+            <div id="fileSize"></div>
+            <button type="submit" id="uploadBtn" disabled>
+              <span class="spin btn-spin" aria-hidden="true"></span>
+              <span id="uploadText">Upload</span>
+            </button>
+            <div class="progress" id="progressBox" style="display:none;">
+              <div id="progressText">Starting…</div>
+              <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+            </div>
+          </form>
         </div>
       </div>
-    </div>
 
-    <div class="section">
-      <h2>Network</h2>
-      <div class="network-box">
-        <div class="network-title">Device Name</div>
-        <div class="network-row">
-          <input id="labelInput" type="text" value="" maxlength="24" placeholder="front-door">
-          <button id="saveLabelBtn" type="button">Save Name</button>
-          <button id="resetWifiBtn" class="btn-secondary" type="button">Reset Wi‑Fi</button>
-        </div>
-        <div class="network-help">mDNS: <span id="mdnsHost">doorbell.local</span></div>
-      </div>
-    </div>
+      <div class="side-stack">
+        <div class="section tab-panel" data-panel="device">
+          <h2>Device</h2>
+          <div class="volume-box">
+            <div class="slider-container">
+              <label>Volume Gain (0.0 – 3.0):</label><br>
+              <input type="range" min="0" max="300" value="100" step="1" id="gainSlider">
+              <div id="gainDisplay">1.00</div>
+            </div>
+          </div>
 
-    <div class="section">
-      <h2>Security</h2>
-      <div class="network-box">
-        <div class="network-title">LAN Admin Password</div>
-        <div class="security-row">
-          <input id="tokenInput" type="password" value="" maxlength="64" placeholder="optional LAN password">
-          <button id="saveSecurityBtn" type="button">Save Password</button>
+          <div class="network-box" style="margin-top:1rem;">
+            <div class="network-title">Device Name</div>
+            <div class="network-row">
+              <input id="labelInput" type="text" value="" maxlength="24" placeholder="front-door">
+              <button id="saveLabelBtn" type="button">Save</button>
+              <button id="resetWifiBtn" class="btn-secondary" type="button">Reset Wi‑Fi</button>
+            </div>
+            <div class="network-help">mDNS: <span id="mdnsHost">doorbell.local</span></div>
+          </div>
         </div>
-        <div class="security-explain">Protects management actions on your local network. This page uses HTTP, so do not reuse an important password.</div>
-        <label class="check-row">
-          <input id="playbackAuthInput" type="checkbox">
-          Require admin password for playback URLs
-        </label>
-        <div class="network-help" id="securityState">No LAN admin password set</div>
-        <div class="security-notice" id="securityNotice">
-          Anyone on this Wi-Fi network can manage sounds and settings.
-          <div class="notice-actions">
-            <button id="addPasswordBtn" type="button">Add Password</button>
-            <button id="dismissSecurityBtn" class="notice-secondary" type="button">Not Now</button>
+
+        <div class="section tab-panel" data-panel="security">
+          <h2>Security</h2>
+          <div class="network-box">
+            <div class="network-title">LAN Admin Password</div>
+            <div class="security-row">
+              <input id="tokenInput" type="password" value="" maxlength="64" placeholder="optional LAN password">
+              <button id="saveSecurityBtn" type="button">Save Password</button>
+            </div>
+            <div class="security-explain">Protects management actions on your local network. This page uses HTTP, so do not reuse an important password.</div>
+            <label class="check-row">
+              <input id="playbackAuthInput" type="checkbox">
+              Require admin password for playback URLs
+            </label>
+            <div class="network-help" id="securityState">No LAN admin password set</div>
+            <div class="security-notice" id="securityNotice">
+              Anyone on this Wi-Fi network can manage sounds and settings.
+              <div class="notice-actions">
+                <button id="addPasswordBtn" type="button">Add Password</button>
+                <button id="dismissSecurityBtn" class="notice-secondary" type="button">Not Now</button>
+              </div>
+            </div>
+          </div>
+          <div class="danger">
+            <button id="cleanBtn" type="button">Delete All Files</button>
           </div>
         </div>
       </div>
     </div>
-    <div class="danger">
-      <button id="cleanBtn" type="button">Delete All Files</button>
-    </div>
+
     <div class="back">
       <a href="/">← Back to Home</a>
     </div>
@@ -1427,6 +1515,8 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     const securityNotice = document.getElementById('securityNotice');
     const addPasswordBtn = document.getElementById('addPasswordBtn');
     const dismissSecurityBtn = document.getElementById('dismissSecurityBtn');
+    const tabButtons = Array.from(document.querySelectorAll('[data-tab]'));
+    const tabPanels = Array.from(document.querySelectorAll('[data-panel]'));
     let maxBytes = 3000 * 1024;
     let authToken = localStorage.getItem('doorbellAuthToken') || '';
     let securityNoticeDismissed = sessionStorage.getItem('doorbellSecurityNoticeDismissed') === '1';
@@ -1476,6 +1566,11 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       if (pct < badAt) return 'fill bad';
       if (pct < warnAt) return 'fill warn';
       return 'fill';
+    }
+
+    function setActiveTab(name) {
+      tabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === name));
+      tabPanels.forEach(panel => panel.classList.toggle('active', panel.dataset.panel === name));
     }
 
     function updateFileInfo() {
@@ -1591,7 +1686,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           maxBytes = Math.max(0, ((s.fsFreeKB ?? 0) * 1024) - (4 * 1024));
           const activeName = s.activeName || 'No chime loaded';
           const hasActive = (s.activePath || '').length > 0;
-          deviceStatus.textContent = hasActive ? 'Manage Chimes' : 'No Chime Loaded';
+          deviceStatus.textContent = hasActive ? 'Active Chime' : 'No Chime Loaded';
           deviceActive.textContent = activeName;
           deviceIp.textContent = s.ip || 'not connected';
           deviceMdns.textContent = s.mdns || 'doorbell.local';
@@ -1760,8 +1855,12 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       sessionStorage.setItem('doorbellSecurityNoticeDismissed', '1');
       updateSecurityUi(false);
     });
+    tabButtons.forEach(btn => {
+      btn.addEventListener('click', () => setActiveTab(btn.dataset.tab));
+    });
 
     // Init
+    setActiveTab('chimes');
     uploadBtn.disabled = true;
     updateFileInfo();
     refreshStatus();
