@@ -40,6 +40,31 @@ existing chime firmware over HTTP with minimal system complexity.
 - Sends HTTP trigger requests to one or more chimes.
 - Can carry sensor identity, sensor type, event type, and optional sound target.
 
+Wi-Fi sensor firmware should be shared across sensor products as much as
+possible. Avoid maintaining separate complete firmware sketches for every
+sensor type.
+
+Common base firmware responsibilities:
+
+- Wi-Fi setup and saved configuration.
+- Captive portal setup and physical reset gesture.
+- Chime target URL, token, sensor ID, sensor type, and event configuration.
+- HTTP `/trigger` client behavior.
+- Cooldown, logging, and basic health behavior.
+
+Sensor-specific behavior should live in small driver modules:
+
+- Button/touch driver.
+- Reed switch driver.
+- Motion driver.
+- Ultrasonic distance driver.
+- Tilt/mailbox driver.
+
+Each driver should expose a small polling contract, such as "begin hardware"
+and "return a semantic event when one occurs." The base firmware should not need
+to know whether the event came from a pushbutton, reed switch, radar module, or
+future sensor type.
+
 ### LoRa Sensor
 
 LoRa sensors are for larger properties or locations where Wi-Fi is unreliable.
