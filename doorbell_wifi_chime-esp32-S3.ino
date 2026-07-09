@@ -82,6 +82,7 @@ bool startMdnsNow(const String &name) {
   if (ok) {
     Serial.println("mDNS: started");
     MDNS.addService("http", "tcp", 80);
+    MDNS.addService("doorbell-chime", "tcp", 80);
   } else {
     Serial.println("mDNS: begin failed, will retry");
   }
@@ -777,6 +778,41 @@ void handleChime(AsyncWebServerRequest *request) {
 
   playChime();
   sendTriggerResponse(request, 200, "Chime triggered OK");
+}
+
+void handleSensorTrigger(AsyncWebServerRequest *request) {
+  if (!requirePlaybackAuth(request)) return;
+  if (!applyGainParam(request)) {
+    sendTriggerResponse(request, 400, "Invalid gain");
+    return;
+  }
+
+  String sensorId = request->hasParam("sensor") ? request->getParam("sensor")->value() : "";
+  String sensorType = request->hasParam("type") ? request->getParam("type")->value() : "";
+  String eventType = request->hasParam("event") ? request->getParam("event")->value() : "";
+  String soundKey = request->hasParam("sound") ? request->getParam("sound")->value() : "";
+  if (soundKey.length() == 0 && request->hasParam("key")) {
+    soundKey = request->getParam("key")->value();
+  }
+  soundKey.toLowerCase();
+
+  Serial.printf("Sensor trigger: sensor=%s type=%s event=%s sound=%s\n",
+                sensorId.c_str(), sensorType.c_str(), eventType.c_str(), soundKey.c_str());
+
+  if (soundKey.length() > 0) {
+    String path;
+    String unusedName;
+    if (!resolveSoundByKey(soundKey, path, unusedName)) {
+      sendTriggerResponse(request, 404, "Sound key not found");
+      return;
+    }
+    playChimePath(path);
+    sendTriggerResponse(request, 200, "Sensor trigger OK");
+    return;
+  }
+
+  playChime();
+  sendTriggerResponse(request, 200, "Sensor trigger OK");
 }
 
 // ── Set gain ───────────────────────────────────────────────────────────────
@@ -2394,6 +2430,7 @@ void setup() {
 
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){ handleRoot(request); });
   server.on("/chime", HTTP_GET, [](AsyncWebServerRequest *request){ handleChime(request); });
+  server.on("/trigger", HTTP_GET, [](AsyncWebServerRequest *request){ handleSensorTrigger(request); });
   server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request){ handleStatus(request); });
   server.on("/list", HTTP_GET, [](AsyncWebServerRequest *request){ handleList(request); });
   server.on("/setgain", HTTP_GET, [](AsyncWebServerRequest *request){ handleSetGain(request); });
