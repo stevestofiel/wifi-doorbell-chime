@@ -1509,7 +1509,7 @@ static const char ROOT_PAGE_TEMPLATE[] PROGMEM = R"rawliteral(
     </div>
 
     <div class="actions">
-      <a href="/upload"><button class="manage-btn">Manage Chimes</button></a>
+      <a href="/manage"><button class="manage-btn">Manage Chimes</button></a>
     </div>
   </div>
 
@@ -1833,6 +1833,8 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     .event-actions button {width:auto; min-width:auto; margin:0; padding:0.5rem 0.75rem; font-size:0.85rem; line-height:1.1; border-radius:8px;}
     .rules-form {display:grid; gap:0.55rem; margin-bottom:0.85rem;}
     .rules-row {display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:0.45rem;}
+    .rules-field {display:grid; gap:0.25rem;}
+    .rules-field label {color:var(--text-light); font-size:0.76rem; font-weight:600;}
     .rules-form input,
     .rules-form select {
       width:100%;
@@ -2143,9 +2145,23 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           <h2>Rules</h2>
           <div class="rules-form">
             <div class="rules-row">
-              <input id="ruleSensorInput" type="text" maxlength="31" placeholder="sensor" title="Sensor ID, such as bench-button or mailbox">
-              <input id="ruleTypeInput" type="text" maxlength="23" placeholder="type" title="Sensor type, such as doorbell, mailbox, motion, or package">
-              <input id="ruleEventInput" type="text" maxlength="23" placeholder="event" title="Event name, such as press, flag-raised, or detected">
+              <div class="rules-field">
+                <label for="ruleSensorInput">Sensor</label>
+                <input id="ruleSensorInput" type="text" maxlength="31" placeholder="bench-button" title="Sensor ID, such as bench-button or mailbox">
+              </div>
+              <div class="rules-field">
+                <label for="ruleTypeSelect">Type</label>
+                <select id="ruleTypeSelect" title="Sensor type">
+                  <option value="doorbell">doorbell</option>
+                  <option value="mailbox">mailbox</option>
+                  <option value="motion">motion</option>
+                  <option value="package">package</option>
+                </select>
+              </div>
+              <div class="rules-field">
+                <label for="ruleEventSelect">Event</label>
+                <select id="ruleEventSelect" title="Sensor event"></select>
+              </div>
             </div>
             <div class="rules-actions">
               <select id="ruleSoundSelect" title="Sound to play when this rule matches"></select>
@@ -2250,8 +2266,8 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     const eventList = document.getElementById('eventList');
     const refreshEventsBtn = document.getElementById('refreshEventsBtn');
     const ruleSensorInput = document.getElementById('ruleSensorInput');
-    const ruleTypeInput = document.getElementById('ruleTypeInput');
-    const ruleEventInput = document.getElementById('ruleEventInput');
+    const ruleTypeSelect = document.getElementById('ruleTypeSelect');
+    const ruleEventSelect = document.getElementById('ruleEventSelect');
     const ruleSoundSelect = document.getElementById('ruleSoundSelect');
     const saveRuleBtn = document.getElementById('saveRuleBtn');
     const ruleSaveState = document.getElementById('ruleSaveState');
@@ -2287,6 +2303,12 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     let authToken = localStorage.getItem('doorbellAuthToken') || '';
     let securityNoticeDismissed = sessionStorage.getItem('doorbellSecurityNoticeDismissed') === '1';
     let availableSounds = [];
+    const eventOptionsByType = {
+      doorbell: ['press'],
+      mailbox: ['flag-raised'],
+      motion: ['detected'],
+      package: ['detected']
+    };
 
     function withToken(url) {
       if (!authToken) return url;
@@ -2401,6 +2423,20 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         option.dataset.path = sound.path || '';
         ruleSoundSelect.appendChild(option);
       });
+    }
+
+    function populateRuleEventSelect() {
+      const type = ruleTypeSelect.value || 'doorbell';
+      const events = eventOptionsByType[type] || ['detected'];
+      const previous = ruleEventSelect.value;
+      ruleEventSelect.innerHTML = '';
+      events.forEach(eventName => {
+        const option = document.createElement('option');
+        option.value = eventName;
+        option.textContent = eventName;
+        ruleEventSelect.appendChild(option);
+      });
+      if (events.includes(previous)) ruleEventSelect.value = previous;
     }
 
     function updateFileInfo() {
@@ -2646,8 +2682,8 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
 
       const body = tokenBody({
         sensor: ruleSensorInput.value,
-        type: ruleTypeInput.value,
-        event: ruleEventInput.value,
+        type: ruleTypeSelect.value,
+        event: ruleEventSelect.value,
         key
       });
 
@@ -2875,7 +2911,8 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     saveSecurityBtn.addEventListener('click', saveSecurity);
     refreshEventsBtn.addEventListener('click', refreshEvents);
     saveRuleBtn.addEventListener('click', saveRule);
-    [ruleSensorInput, ruleTypeInput, ruleEventInput].forEach(input => {
+    ruleTypeSelect.addEventListener('change', populateRuleEventSelect);
+    [ruleSensorInput, ruleTypeSelect, ruleEventSelect].forEach(input => {
       input.addEventListener('keydown', e => {
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -2900,6 +2937,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     setActiveTab('chimes');
     uploadBtn.disabled = true;
     updateFileInfo();
+    populateRuleEventSelect();
     refreshStatus();
     refreshSounds();
     refreshEvents();
@@ -3105,7 +3143,7 @@ void setup() {
   server.on("/play", HTTP_GET, [](AsyncWebServerRequest *request){ handlePlayByKey(request); });
   server.on("/setactive", HTTP_GET, [](AsyncWebServerRequest *request){ handleSetActive(request); });
   server.on("/delete", HTTP_GET, [](AsyncWebServerRequest *request){ handleDelete(request); });
-  server.on("/upload", HTTP_GET, [](AsyncWebServerRequest *request){ handleUploadForm(request); });
+  server.on("/manage", HTTP_GET, [](AsyncWebServerRequest *request){ handleUploadForm(request); });
   server.on("/upload", HTTP_POST,
             [](AsyncWebServerRequest *request){ handleUploadDone(request); },
             [](AsyncWebServerRequest *request, String filename, size_t index, uint8_t *data, size_t len, bool final){
