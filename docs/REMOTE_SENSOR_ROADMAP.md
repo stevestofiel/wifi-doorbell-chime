@@ -246,6 +246,34 @@ Initial sensor types:
 Multi-chime support should make older Wi-Fi-only chimes more useful, not
 obsolete.
 
+## Multi-Chime Network Model
+
+The product should be distributed-first. A central server, Docker service, or
+home-automation hub may be useful later, but should not be required for the core
+system.
+
+Consensus model:
+
+- Each chime is standalone and useful by itself.
+- Multiple chimes form a peer group.
+- Sensors send semantic events rather than sound-file assumptions.
+- Each chime decides locally whether to play, stay silent, log, indicate, or
+  relay an event.
+- Each chime stores its own recent event log.
+- Any chime UI may fetch peer logs and merge them into a whole-property view.
+- Event IDs should prevent duplicate playback, relay loops, and duplicate log
+  rows.
+- MQTT, Home Assistant, Docker dashboards, and similar systems are optional
+  integrations, not required infrastructure.
+- A LoRa gateway chime is a peer with extra radio capability, not a mandatory
+  parent controller.
+
+In short:
+
+```text
+Distributed chime network first; optional hub integrations later.
+```
+
 Routing scopes:
 
 - `local`: play only on the receiving chime.
