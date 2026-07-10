@@ -1,6 +1,6 @@
 <!-- SPDX-License-Identifier: MIT -->
 
-# Remote Sensor And Multi-Chime Roadmap
+# Product Roadmap
 
 This roadmap captures the planned expansion from a single Wi-Fi chime into a
 small product family that supports remote sensors, multiple chime receivers, and
@@ -25,6 +25,17 @@ useful device.
 - [ ] MQTT event publishing.
 - [ ] LoRa gateway prototype.
 - [ ] LoRa sensor prototype.
+
+## Next Session Plan
+
+Focus: make the chime an event-aware node.
+
+1. Add a `SensorEvent` structure on the chime.
+2. Add `eventId` handling.
+3. Add an in-memory recent event log.
+4. Add a `/events` JSON endpoint.
+5. Add last-event summary fields to `/status`.
+6. Blink the chime LED when a trigger is received.
 
 ## Product Variants
 

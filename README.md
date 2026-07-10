@@ -23,9 +23,9 @@ enclosure.
 See [Hardware Diagrams](docs/HARDWARE.md) for component, wiring, and enclosure
 layout diagrams.
 
-See [Remote Sensor And Multi-Chime Roadmap](docs/REMOTE_SENSOR_ROADMAP.md) for
-planned support for Wi-Fi sensors, LoRa gateway chimes, and multiple chime
-receivers.
+See the [Product Roadmap](docs/PRODUCT_ROADMAP.md) for planned support for
+Wi-Fi sensors, LoRa gateway chimes, multiple chime receivers, and local event
+integrations.
 
 ## Build
 
