@@ -2126,6 +2126,24 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           <div id="soundList" style="text-align:left;">Loading…</div>
         </div>
 
+        <div class="section tab-panel" data-panel="upload">
+          <h2>Upload Sound</h2>
+          <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">
+            <label for="fileInput" class="prompt">Choose a WAV or MP3 file</label>
+            <input type="file" id="fileInput" name="file" accept=".wav,.mp3" title="Choose a WAV or MP3 file to upload to the chime" required>
+            <div id="fileName"></div>
+            <div id="fileSize"></div>
+            <button type="submit" id="uploadBtn" title="Upload the selected sound and make it available as a chime" disabled>
+              <span class="spin btn-spin" aria-hidden="true"></span>
+              <span id="uploadText">Upload</span>
+            </button>
+            <div class="progress" id="progressBox" style="display:none;">
+              <div id="progressText">Starting…</div>
+              <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+            </div>
+          </form>
+        </div>
+
         <div class="section tab-panel" data-panel="rules">
           <h2>Rules</h2>
           <div class="rules-form">
@@ -2168,24 +2186,6 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           <div class="event-actions">
             <button id="refreshEventsBtn" type="button" title="Refresh recent events">Refresh</button>
           </div>
-        </div>
-
-        <div class="section tab-panel" data-panel="upload">
-          <h2>Upload Sound</h2>
-          <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">
-            <label for="fileInput" class="prompt">Choose a WAV or MP3 file</label>
-            <input type="file" id="fileInput" name="file" accept=".wav,.mp3" title="Choose a WAV or MP3 file to upload to the chime" required>
-            <div id="fileName"></div>
-            <div id="fileSize"></div>
-            <button type="submit" id="uploadBtn" title="Upload the selected sound and make it available as a chime" disabled>
-              <span class="spin btn-spin" aria-hidden="true"></span>
-              <span id="uploadText">Upload</span>
-            </button>
-            <div class="progress" id="progressBox" style="display:none;">
-              <div id="progressText">Starting…</div>
-              <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
-            </div>
-          </form>
         </div>
       </div>
 
