@@ -3,8 +3,8 @@
 
 #include <Arduino.h>
 #include "ButtonTouchDriver.h"
-#include "../wifi_sensor_common/SensorConfig.h"
-#include "../wifi_sensor_common/TriggerClient.h"
+#include "../common/SensorConfig.h"
+#include "../common/TriggerClient.h"
 
 // ---- Wiring ----------------------------------------------------------------
 // Button: one side to GPIO3, other side to GND. Uses internal pull-up.

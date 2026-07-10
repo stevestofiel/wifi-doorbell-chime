@@ -1,8 +1,8 @@
 <!-- SPDX-License-Identifier: MIT -->
 
-# Wi-Fi Sensor Radar Prototype
+# Wi-Fi Radar Sensor Firmware
 
-Reference sketch for an ESP32-S3 Super Mini-style board connected to an
+Firmware for an ESP32-S3 Super Mini-style board connected to an
 RCWL-0516 microwave radar motion module. It reuses the shared Wi-Fi setup and
 HTTP `/trigger` client used by the button/touch prototype.
 

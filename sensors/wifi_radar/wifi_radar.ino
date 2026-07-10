@@ -3,8 +3,8 @@
 
 #include <Arduino.h>
 #include "RcwlRadarDriver.h"
-#include "../wifi_sensor_common/SensorConfig.h"
-#include "../wifi_sensor_common/TriggerClient.h"
+#include "../common/SensorConfig.h"
+#include "../common/TriggerClient.h"
 
 // ---- Wiring ----------------------------------------------------------------
 // RCWL-0516: GND -> GND, 3V3 -> ESP32 3.3V, OUT -> GPIO4.

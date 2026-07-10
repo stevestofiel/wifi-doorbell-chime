@@ -33,7 +33,7 @@ sensor=bench-radar&type=motion&event=detected
 
 ## Prototype Checkpoints
 
-1. Upload `examples/wifi_sensor_radar/wifi_sensor_radar.ino`.
+1. Upload `sensors/wifi_radar/wifi_radar.ino`.
 2. Configure the chime URL through the `ChimeSensor` setup portal.
 3. Watch serial logs for `Input change: radar=1`.
 4. Confirm the chime event log shows `bench-radar motion: detected`.

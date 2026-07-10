@@ -1,20 +1,20 @@
 <!-- SPDX-License-Identifier: MIT -->
 
-# Wi-Fi Sensor Button Prototype
+# Wi-Fi Button/Touch Sensor Firmware
 
-Reference sketch for an ESP32 Super Mini-style board used as a remote chime
+Firmware for an ESP32 Super Mini-style board used as a remote chime
 sensor. The first bench board was labeled like a C3 variant, but uploaded as an
 ESP32-S3.
 
 ## Structure
 
-This example is split so future sensor types can reuse the same base behavior:
+This sensor firmware is split so future sensor types can reuse the same base behavior:
 
-- `../wifi_sensor_common/SensorConfig.h`: Wi-Fi setup, captive portal fields, saved sensor config,
+- `../common/SensorConfig.h`: Wi-Fi setup, captive portal fields, saved sensor config,
   and setup-reset behavior.
-- `../wifi_sensor_common/TriggerClient.h`: Wi-Fi reconnect and HTTP `/trigger` calls.
+- `../common/TriggerClient.h`: Wi-Fi reconnect and HTTP `/trigger` calls.
 - `ButtonTouchDriver.h`: physical button and capacitive touch input handling.
-- `wifi_sensor_button.ino`: wires the config manager, trigger client, and
+- `wifi_button_touch.ino`: wires the config manager, trigger client, and
   selected driver together.
 
 Additional sensors, such as reed switches, radar/motion modules, or ultrasonic
