@@ -7,6 +7,25 @@ small product family that supports remote sensors, multiple chime receivers, and
 large-property LoRa coverage while preserving the current Wi-Fi chime as a
 useful device.
 
+## Implementation Status
+
+- [x] Remote sensor and multi-chime roadmap documented.
+- [x] Minimal chime `/trigger` endpoint.
+- [x] Chime `_doorbell-chime._tcp` mDNS service advertisement.
+- [x] Wi-Fi sensor button/touch prototype.
+- [x] Sensor captive portal setup.
+- [x] Sensor reset/setup gesture.
+- [x] Sensor base firmware and driver refactor.
+- [x] Distributed multi-chime network model documented.
+- [ ] Chime event log and indicator behavior.
+- [ ] Event IDs and duplicate suppression.
+- [ ] Per-sensor sound rules.
+- [ ] Peer chime configuration.
+- [ ] Peer log aggregation in the chime UI.
+- [ ] MQTT event publishing.
+- [ ] LoRa gateway prototype.
+- [ ] LoRa sensor prototype.
+
 ## Product Variants
 
 ### Wi-Fi Chime
