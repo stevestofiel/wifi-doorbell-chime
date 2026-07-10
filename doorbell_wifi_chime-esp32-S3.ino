@@ -1851,7 +1851,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     .rule-empty {color:var(--text-light); font-size:0.9rem;}
     .rule-item {
       display:grid;
-      grid-template-columns:minmax(0, 1fr) auto;
+      grid-template-columns:minmax(0, 1fr) auto auto;
       gap:0.2rem 0.65rem;
       padding:0.65rem 0;
       border-bottom:1px solid rgba(143,160,179,0.14);
@@ -1860,17 +1860,30 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     .rule-main {min-width:0; color:#d8e2ee; font-size:0.92rem; overflow-wrap:anywhere;}
     .rule-meta {grid-column:1 / -1; color:var(--text-light); font-size:0.78rem; overflow-wrap:anywhere;}
     .rule-delete {
-      width:30px;
+      width:auto;
       height:30px;
       min-width:30px;
       margin:0;
-      padding:0;
+      padding:0 0.55rem;
       border-radius:8px;
       background:rgba(255,255,255,0.055);
       border:1px solid rgba(143,160,179,0.16);
       box-shadow:none;
       color:var(--danger);
-      font-size:1rem;
+      font-size:0.8rem;
+    }
+    .rule-edit {
+      width:auto;
+      height:30px;
+      min-width:30px;
+      margin:0;
+      padding:0 0.55rem;
+      border-radius:8px;
+      background:rgba(255,255,255,0.055);
+      border:1px solid rgba(143,160,179,0.16);
+      box-shadow:none;
+      color:#d8e2ee;
+      font-size:0.8rem;
     }
     .rule-save-state {min-height:1rem; font-size:0.78rem; color:var(--text-light);}
     .rule-save-state.error {color:#fb7185;}
@@ -2099,9 +2112,9 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
 
     <div class="tabbar" role="tablist" aria-label="Manage sections">
       <button class="active" type="button" data-tab="chimes" title="Select, preview, or delete uploaded chime sounds">Chimes</button>
-      <button type="button" data-tab="upload" title="Upload a new WAV or MP3 chime sound">Upload</button>
-      <button type="button" data-tab="events" title="View recent sensor and chime events">Events</button>
       <button type="button" data-tab="rules" title="Map sensor events to specific sounds">Rules</button>
+      <button type="button" data-tab="events" title="View recent sensor and chime events">Events</button>
+      <button type="button" data-tab="upload" title="Upload a new WAV or MP3 chime sound">Upload</button>
       <button type="button" data-tab="device" title="Adjust volume, device name, Wi-Fi, and advanced network options">Device</button>
       <button type="button" data-tab="security" title="Set the LAN admin password and manage protected actions">Security</button>
     </div>
@@ -2111,34 +2124,6 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         <div class="section tab-panel active" data-panel="chimes">
           <h2>Chimes</h2>
           <div id="soundList" style="text-align:left;">Loading…</div>
-        </div>
-
-        <div class="section tab-panel" data-panel="upload">
-          <h2>Upload Sound</h2>
-          <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">
-            <label for="fileInput" class="prompt">Choose a WAV or MP3 file</label>
-            <input type="file" id="fileInput" name="file" accept=".wav,.mp3" title="Choose a WAV or MP3 file to upload to the chime" required>
-            <div id="fileName"></div>
-            <div id="fileSize"></div>
-            <button type="submit" id="uploadBtn" title="Upload the selected sound and make it available as a chime" disabled>
-              <span class="spin btn-spin" aria-hidden="true"></span>
-              <span id="uploadText">Upload</span>
-            </button>
-            <div class="progress" id="progressBox" style="display:none;">
-              <div id="progressText">Starting…</div>
-              <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-            </div>
-          </form>
-        </div>
-
-        <div class="section tab-panel" data-panel="events">
-          <h2>Events</h2>
-          <div id="eventList" class="event-list">
-            <div class="event-empty">Loading...</div>
-          </div>
-          <div class="event-actions">
-            <button id="refreshEventsBtn" type="button" title="Refresh recent events">Refresh</button>
-          </div>
         </div>
 
         <div class="section tab-panel" data-panel="rules">
@@ -2169,9 +2154,38 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             </div>
             <div id="ruleSaveState" class="rule-save-state"></div>
           </div>
+          <div class="network-help">Sensor is optional. Leave it blank to match all sensors of the selected type and event.</div>
           <div id="ruleList" class="rule-list">
             <div class="rule-empty">Loading...</div>
           </div>
+        </div>
+
+        <div class="section tab-panel" data-panel="events">
+          <h2>Events</h2>
+          <div id="eventList" class="event-list">
+            <div class="event-empty">Loading...</div>
+          </div>
+          <div class="event-actions">
+            <button id="refreshEventsBtn" type="button" title="Refresh recent events">Refresh</button>
+          </div>
+        </div>
+
+        <div class="section tab-panel" data-panel="upload">
+          <h2>Upload Sound</h2>
+          <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">
+            <label for="fileInput" class="prompt">Choose a WAV or MP3 file</label>
+            <input type="file" id="fileInput" name="file" accept=".wav,.mp3" title="Choose a WAV or MP3 file to upload to the chime" required>
+            <div id="fileName"></div>
+            <div id="fileSize"></div>
+            <button type="submit" id="uploadBtn" title="Upload the selected sound and make it available as a chime" disabled>
+              <span class="spin btn-spin" aria-hidden="true"></span>
+              <span id="uploadText">Upload</span>
+            </button>
+            <div class="progress" id="progressBox" style="display:none;">
+              <div id="progressText">Starting…</div>
+              <div class="progress-bar"><div id="progressFill" class="progress-fill"></div></div>
+            </div>
+          </form>
         </div>
       </div>
 
@@ -2645,20 +2659,38 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         const main = document.createElement('div');
         main.className = 'rule-main';
         main.textContent = ruleLabel(rule);
+        const edit = document.createElement('button');
+        edit.className = 'rule-edit';
+        edit.type = 'button';
+        edit.title = 'Edit this rule';
+        edit.textContent = 'Edit';
+        edit.addEventListener('click', () => editRule(rule));
         const del = document.createElement('button');
         del.className = 'rule-delete';
         del.type = 'button';
         del.title = 'Delete this rule';
-        del.textContent = 'x';
+        del.textContent = 'Delete';
         del.addEventListener('click', () => deleteRule(rule));
         const meta = document.createElement('div');
         meta.className = 'rule-meta';
         meta.textContent = rule.path || '';
         row.appendChild(main);
+        row.appendChild(edit);
         row.appendChild(del);
         row.appendChild(meta);
         ruleList.appendChild(row);
       });
+    }
+
+    function editRule(rule) {
+      ruleSensorInput.value = rule.sensor || '';
+      ruleTypeSelect.value = rule.type || 'doorbell';
+      populateRuleEventSelect();
+      ruleEventSelect.value = rule.event || ruleEventSelect.value;
+      const key = rule.key || '';
+      if (key) ruleSoundSelect.value = key;
+      setRuleSaveState('Editing existing rule');
+      ruleSensorInput.focus();
     }
 
     function refreshRules() {
