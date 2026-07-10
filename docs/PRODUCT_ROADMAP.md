@@ -18,7 +18,7 @@ useful device.
 - [x] Sensor base firmware and driver refactor.
 - [x] Distributed multi-chime network model documented.
 - [x] Chime event log and indicator behavior.
-- [ ] Event IDs and duplicate suppression.
+- [x] Event IDs and duplicate suppression.
 - [ ] Per-sensor sound rules.
 - [ ] Peer chime configuration.
 - [ ] Peer log aggregation in the chime UI.
@@ -28,14 +28,13 @@ useful device.
 
 ## Next Session Plan
 
-Focus: make the chime an event-aware node.
+Focus: make recent events visible in the chime web UI.
 
-1. Add a `SensorEvent` structure on the chime.
-2. Add `eventId` handling.
-3. Add an in-memory recent event log.
-4. Add a `/events` JSON endpoint.
-5. Add last-event summary fields to `/status`.
-6. Blink the chime LED when a trigger is received.
+1. Add an Events tab or panel to the main chime page.
+2. Fetch `/events` on demand and after local playback actions.
+3. Show event time/age, sensor ID, type, event, source, and sound path.
+4. Keep the layout compact so it works well on mobile.
+5. Leave peer log aggregation for the later multi-chime slice.
 
 ## Product Variants
 

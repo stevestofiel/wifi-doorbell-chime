@@ -73,11 +73,12 @@ back to the chime base URL before saving.
 The sketch calls `/trigger` with a semantic event:
 
 ```text
-/trigger?sensor=bench-button&type=doorbell&event=press
+/trigger?sensor=bench-button&type=doorbell&event=press&eventId=<sensor-generated-id>
 ```
 
-It falls back to `/chime` when testing against older chime firmware that does
-not have `/trigger` yet.
+The `eventId` is generated from the sensor MAC address, a local counter, and
+uptime so the chime can ignore duplicate retries. It falls back to `/chime`
+when testing against older chime firmware that does not have `/trigger` yet.
 
 ## Reset Setup
 

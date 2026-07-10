@@ -254,6 +254,24 @@ const ChimeEvent* latestEvent() {
   return &eventLog[eventLogIndexNewest(0)];
 }
 
+String normalizeEventId(const String &input) {
+  String id = input;
+  id.trim();
+  if (id.length() > 64) id = id.substring(0, 64);
+  return id;
+}
+
+bool hasSeenEventId(const String &eventId) {
+  String id = normalizeEventId(eventId);
+  if (id.length() == 0) return false;
+
+  for (size_t i = 0; i < eventLogCount; ++i) {
+    const ChimeEvent &event = eventLog[eventLogIndexNewest(i)];
+    if (event.eventId == id) return true;
+  }
+  return false;
+}
+
 void appendEventJson(JsonObject obj, const ChimeEvent &event) {
   obj["seq"] = event.seq;
   obj["eventId"] = event.eventId;
@@ -276,12 +294,9 @@ void recordChimeEvent(const String &eventId,
                       const String &soundPath) {
   ChimeEvent &entry = eventLog[eventLogNext];
   entry.seq = ++eventSeq;
-  entry.eventId = eventId;
-  entry.eventId.trim();
+  entry.eventId = normalizeEventId(eventId);
   if (entry.eventId.length() == 0) {
     entry.eventId = "local-" + String(entry.seq);
-  } else if (entry.eventId.length() > 64) {
-    entry.eventId = entry.eventId.substring(0, 64);
   }
   entry.sensor = sensor;
   entry.type = type;
@@ -295,9 +310,6 @@ void recordChimeEvent(const String &eventId,
   if (eventLogCount < EVENT_LOG_SIZE) eventLogCount++;
 
   pulseEventLed();
-  Serial.printf("Event logged: id=%s sensor=%s type=%s event=%s source=%s sound=%s\n",
-                entry.eventId.c_str(), entry.sensor.c_str(), entry.type.c_str(),
-                entry.event.c_str(), entry.source.c_str(), entry.soundPath.c_str());
 }
 
 // ── Status JSON ────────────────────────────────────────────────────────────
@@ -917,8 +929,10 @@ void handleSensorTrigger(AsyncWebServerRequest *request) {
   }
   soundKey.toLowerCase();
 
-  Serial.printf("Sensor trigger: sensor=%s type=%s event=%s sound=%s\n",
-                sensorId.c_str(), sensorType.c_str(), eventType.c_str(), soundKey.c_str());
+  if (hasSeenEventId(eventId)) {
+    sendTriggerResponse(request, 200, "Duplicate trigger ignored");
+    return;
+  }
 
   if (soundKey.length() > 0) {
     String path;

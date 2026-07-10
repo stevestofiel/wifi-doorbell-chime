@@ -25,10 +25,12 @@ public:
     }
 
     const SensorConfig& config = configManager.config;
+    String eventId = makeEventId(now);
     String triggerUrl = config.chimeBaseUrl +
       "/trigger?sensor=" + config.sensorId +
       "&type=" + config.sensorType +
-      "&event=" + config.sensorEvent;
+      "&event=" + config.sensorEvent +
+      "&eventId=" + eventId;
 
     int status = httpGet(withToken(triggerUrl));
     if (status == 404) {
@@ -41,8 +43,16 @@ private:
   const SensorConfigManager& configManager;
   unsigned long cooldownMs;
   unsigned long lastTriggerMs = 0;
+  uint32_t eventCounter = 0;
 
   static constexpr unsigned long WIFI_CONNECT_TIMEOUT_MS = 15000;
+
+  String makeEventId(unsigned long now) {
+    String id = WiFi.macAddress();
+    id.replace(":", "");
+    id.toLowerCase();
+    return id + "-" + String(++eventCounter) + "-" + String(now, HEX);
+  }
 
   bool ensureWiFi() {
     if (WiFi.status() == WL_CONNECTED) return true;
