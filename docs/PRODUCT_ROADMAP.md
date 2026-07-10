@@ -21,7 +21,7 @@ useful device.
 - [x] Event IDs and duplicate suppression.
 - [x] Local chime event log UI.
 - [x] Sensor-to-sound rule backend.
-- [ ] Sensor-to-sound rule editor UI.
+- [x] Sensor-to-sound rule editor UI.
 - [ ] Peer chime configuration.
 - [ ] Peer log aggregation in the chime UI.
 - [ ] MQTT event publishing.
@@ -30,13 +30,13 @@ useful device.
 
 ## Next Session Plan
 
-Focus: add the sensor-to-sound rule editor UI.
+Focus: add compact built-in default sound assets.
 
-1. Add a Rules tab/panel to the chime web UI.
-2. Load uploaded sounds from `/list` and existing rules from `/rules`.
-3. Allow adding, replacing, and deleting sensor/type/event rules.
-4. Keep the form compact and mobile-friendly.
-5. Smoke test with the bench button/touch sensor.
+1. Pick the first tiny embedded sound for `doorbell`.
+2. Add a resolver path for built-in audio keys that do not require SPIFFS.
+3. Add mailbox, motion, and package defaults after the first asset works.
+4. Keep user-uploaded rules higher priority than built-in defaults.
+5. Smoke test fallback behavior with no custom rule configured.
 
 ## Product Variants
 

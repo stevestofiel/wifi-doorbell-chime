@@ -1831,6 +1831,48 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     .event-meta {grid-column:1 / -1; color:var(--text-light); font-size:0.78rem; overflow-wrap:anywhere;}
     .event-actions {display:flex; justify-content:flex-end; margin-top:0.75rem;}
     .event-actions button {width:auto; min-width:auto; margin:0; padding:0.5rem 0.75rem; font-size:0.85rem; line-height:1.1; border-radius:8px;}
+    .rules-form {display:grid; gap:0.55rem; margin-bottom:0.85rem;}
+    .rules-row {display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:0.45rem;}
+    .rules-form input,
+    .rules-form select {
+      width:100%;
+      color:var(--text);
+      background:rgba(4,9,16,0.42);
+      border:1px solid var(--border-rest);
+      border-radius:8px;
+      padding:0.48rem 0.55rem;
+      font-size:0.86rem;
+    }
+    .rules-actions {display:grid; grid-template-columns:1fr auto; gap:0.45rem; align-items:center;}
+    .rules-actions button {width:auto; min-width:auto; margin:0; padding:0.55rem 0.8rem; font-size:0.85rem; line-height:1.1; border-radius:8px;}
+    .rule-list {display:grid; gap:0.45rem;}
+    .rule-empty {color:var(--text-light); font-size:0.9rem;}
+    .rule-item {
+      display:grid;
+      grid-template-columns:minmax(0, 1fr) auto;
+      gap:0.2rem 0.65rem;
+      padding:0.65rem 0;
+      border-bottom:1px solid rgba(143,160,179,0.14);
+    }
+    .rule-item:last-child {border-bottom:none;}
+    .rule-main {min-width:0; color:#d8e2ee; font-size:0.92rem; overflow-wrap:anywhere;}
+    .rule-meta {grid-column:1 / -1; color:var(--text-light); font-size:0.78rem; overflow-wrap:anywhere;}
+    .rule-delete {
+      width:30px;
+      height:30px;
+      min-width:30px;
+      margin:0;
+      padding:0;
+      border-radius:8px;
+      background:rgba(255,255,255,0.055);
+      border:1px solid rgba(143,160,179,0.16);
+      box-shadow:none;
+      color:var(--danger);
+      font-size:1rem;
+    }
+    .rule-save-state {min-height:1rem; font-size:0.78rem; color:var(--text-light);}
+    .rule-save-state.error {color:#fb7185;}
+    .rule-save-state.ok {color:#86efac;}
     .btn-secondary {background:linear-gradient(180deg, rgba(148,163,184,0.22), rgba(71,85,105,0.32));}
     .btn-secondary:hover:not(:disabled) {background:linear-gradient(180deg, rgba(148,163,184,0.3), rgba(71,85,105,0.42));}
     .volume-box {margin-top: 0.5rem; padding:0.8rem; background:rgba(4,9,16,0.28); border:1px solid rgba(143,160,179,0.16); border-radius:8px; text-align:center;}
@@ -1983,18 +2025,18 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       .metrics-grid {grid-template-columns:1fr; gap:0.75rem;}
       .tabbar {
         display:grid;
-        grid-template-columns:repeat(5, minmax(0, 1fr));
+        grid-template-columns:repeat(6, minmax(0, 1fr));
         gap:0.35rem;
         margin:0.5rem 0 1rem;
       }
       .tabbar button {
         width:100%;
         margin:0;
-        padding:0.55rem 0.2rem;
+        padding:0.55rem 0.15rem;
         border-radius:8px;
         background:rgba(255,255,255,0.075);
         color:#d8e2ee;
-        font-size:0.76rem;
+        font-size:0.72rem;
         border:1px solid rgba(143,160,179,0.16);
         box-shadow:none;
       }
@@ -2010,7 +2052,9 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       .section {padding:0.9rem;}
       .section + .section {margin-top:1rem;}
       .network-row,
-      .security-row {display:grid; grid-template-columns:1fr; gap:0.5rem;}
+      .security-row,
+      .rules-row,
+      .rules-actions {display:grid; grid-template-columns:1fr; gap:0.5rem;}
       .network-row button,
       .security-row button {width:100%;}
       .dns-custom {grid-template-columns:1fr;}
@@ -2055,6 +2099,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       <button class="active" type="button" data-tab="chimes" title="Select, preview, or delete uploaded chime sounds">Chimes</button>
       <button type="button" data-tab="upload" title="Upload a new WAV or MP3 chime sound">Upload</button>
       <button type="button" data-tab="events" title="View recent sensor and chime events">Events</button>
+      <button type="button" data-tab="rules" title="Map sensor events to specific sounds">Rules</button>
       <button type="button" data-tab="device" title="Adjust volume, device name, Wi-Fi, and advanced network options">Device</button>
       <button type="button" data-tab="security" title="Set the LAN admin password and manage protected actions">Security</button>
     </div>
@@ -2091,6 +2136,25 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           </div>
           <div class="event-actions">
             <button id="refreshEventsBtn" type="button" title="Refresh recent events">Refresh</button>
+          </div>
+        </div>
+
+        <div class="section tab-panel" data-panel="rules">
+          <h2>Rules</h2>
+          <div class="rules-form">
+            <div class="rules-row">
+              <input id="ruleSensorInput" type="text" maxlength="31" placeholder="sensor" title="Sensor ID, such as bench-button or mailbox">
+              <input id="ruleTypeInput" type="text" maxlength="23" placeholder="type" title="Sensor type, such as doorbell, mailbox, motion, or package">
+              <input id="ruleEventInput" type="text" maxlength="23" placeholder="event" title="Event name, such as press, flag-raised, or detected">
+            </div>
+            <div class="rules-actions">
+              <select id="ruleSoundSelect" title="Sound to play when this rule matches"></select>
+              <button id="saveRuleBtn" type="button" title="Save or replace this sensor sound rule">Save Rule</button>
+            </div>
+            <div id="ruleSaveState" class="rule-save-state"></div>
+          </div>
+          <div id="ruleList" class="rule-list">
+            <div class="rule-empty">Loading...</div>
           </div>
         </div>
       </div>
@@ -2185,6 +2249,13 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     const fsBar = document.getElementById('fsBar');
     const eventList = document.getElementById('eventList');
     const refreshEventsBtn = document.getElementById('refreshEventsBtn');
+    const ruleSensorInput = document.getElementById('ruleSensorInput');
+    const ruleTypeInput = document.getElementById('ruleTypeInput');
+    const ruleEventInput = document.getElementById('ruleEventInput');
+    const ruleSoundSelect = document.getElementById('ruleSoundSelect');
+    const saveRuleBtn = document.getElementById('saveRuleBtn');
+    const ruleSaveState = document.getElementById('ruleSaveState');
+    const ruleList = document.getElementById('ruleList');
     const deviceStatus = document.getElementById('deviceStatus');
     const deviceActive = document.getElementById('deviceActive');
     const deviceIp = document.getElementById('deviceIp');
@@ -2215,6 +2286,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     let maxBytes = 3000 * 1024;
     let authToken = localStorage.getItem('doorbellAuthToken') || '';
     let securityNoticeDismissed = sessionStorage.getItem('doorbellSecurityNoticeDismissed') === '1';
+    let availableSounds = [];
 
     function withToken(url) {
       if (!authToken) return url;
@@ -2267,6 +2339,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       tabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === name));
       tabPanels.forEach(panel => panel.classList.toggle('active', panel.dataset.panel === name));
       if (name === 'events') refreshEvents();
+      if (name === 'rules') refreshRules();
     }
 
     function selectedLanDnsSuffix() {
@@ -2291,6 +2364,43 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     function setDeviceSaveState(text, kind = '') {
       deviceSaveState.textContent = text;
       deviceSaveState.className = kind ? `save-state ${kind}` : 'save-state';
+    }
+
+    function setRuleSaveState(text, kind = '') {
+      ruleSaveState.textContent = text;
+      ruleSaveState.className = kind ? `rule-save-state ${kind}` : 'rule-save-state';
+    }
+
+    function ruleLabel(rule) {
+      const selector = [
+        rule.sensor || '*',
+        rule.type || '*',
+        rule.event || '*'
+      ].join(' / ');
+      return `${selector} -> ${rule.key || rule.path || 'sound'}`;
+    }
+
+    function populateRuleSoundSelect() {
+      ruleSoundSelect.innerHTML = '';
+      if (!availableSounds.length) {
+        const option = document.createElement('option');
+        option.value = '';
+        option.textContent = 'No uploaded sounds';
+        ruleSoundSelect.appendChild(option);
+        ruleSoundSelect.disabled = true;
+        saveRuleBtn.disabled = true;
+        return;
+      }
+
+      ruleSoundSelect.disabled = false;
+      saveRuleBtn.disabled = false;
+      availableSounds.forEach(sound => {
+        const option = document.createElement('option');
+        option.value = sound.key || '';
+        option.textContent = sound.name || sound.path || sound.key;
+        option.dataset.path = sound.path || '';
+        ruleSoundSelect.appendChild(option);
+      });
     }
 
     function updateFileInfo() {
@@ -2485,10 +2595,109 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         });
     }
 
+    function renderRules(data) {
+      const rules = data.rules || [];
+      if (!rules.length) {
+        ruleList.innerHTML = '<div class="rule-empty">No custom rules yet.</div>';
+        return;
+      }
+
+      ruleList.innerHTML = '';
+      rules.forEach(rule => {
+        const row = document.createElement('div');
+        row.className = 'rule-item';
+        const main = document.createElement('div');
+        main.className = 'rule-main';
+        main.textContent = ruleLabel(rule);
+        const del = document.createElement('button');
+        del.className = 'rule-delete';
+        del.type = 'button';
+        del.title = 'Delete this rule';
+        del.textContent = 'x';
+        del.addEventListener('click', () => deleteRule(rule));
+        const meta = document.createElement('div');
+        meta.className = 'rule-meta';
+        meta.textContent = rule.path || '';
+        row.appendChild(main);
+        row.appendChild(del);
+        row.appendChild(meta);
+        ruleList.appendChild(row);
+      });
+    }
+
+    function refreshRules() {
+      return fetch('/rules')
+        .then(r => r.json())
+        .then(data => {
+          renderRules(data);
+        })
+        .catch(() => {
+          ruleList.innerHTML = '<div class="rule-empty">Unable to load rules.</div>';
+        });
+    }
+
+    function saveRule() {
+      const selected = ruleSoundSelect.selectedOptions[0];
+      const key = selected ? selected.value : '';
+      if (!key) {
+        setRuleSaveState('Choose a sound first', 'error');
+        return;
+      }
+
+      const body = tokenBody({
+        sensor: ruleSensorInput.value,
+        type: ruleTypeInput.value,
+        event: ruleEventInput.value,
+        key
+      });
+
+      setRuleSaveState('Saving...');
+      fetchAuth('/rules', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body
+      })
+      .then(r => {
+        if (!r.ok) throw new Error(`Save failed (${r.status})`);
+        return r.json();
+      })
+      .then(data => {
+        setRuleSaveState('Saved', 'ok');
+        renderRules(data);
+      })
+      .catch(err => setRuleSaveState(err.message || 'Save failed', 'error'));
+    }
+
+    function deleteRule(rule) {
+      const body = tokenBody({
+        sensor: rule.sensor || '',
+        type: rule.type || '',
+        event: rule.event || '',
+        delete: '1'
+      });
+
+      fetchAuth('/rules', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body
+      })
+      .then(r => {
+        if (!r.ok) throw new Error(`Delete failed (${r.status})`);
+        return r.json();
+      })
+      .then(data => {
+        setRuleSaveState('Deleted', 'ok');
+        renderRules(data);
+      })
+      .catch(err => setRuleSaveState(err.message || 'Delete failed', 'error'));
+    }
+
     function refreshSounds() {
       fetch('/list')
         .then(r => r.json())
         .then(s => {
+          availableSounds = s.items || [];
+          populateRuleSoundSelect();
           if (!s.items || s.items.length === 0) {
             soundList.textContent = 'No chimes uploaded yet.';
             return;
@@ -2665,6 +2874,15 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     });
     saveSecurityBtn.addEventListener('click', saveSecurity);
     refreshEventsBtn.addEventListener('click', refreshEvents);
+    saveRuleBtn.addEventListener('click', saveRule);
+    [ruleSensorInput, ruleTypeInput, ruleEventInput].forEach(input => {
+      input.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          saveRule();
+        }
+      });
+    });
     addPasswordBtn.addEventListener('click', () => {
       tokenInput.focus();
       tokenInput.scrollIntoView({block: 'center', behavior: 'smooth'});
@@ -2685,6 +2903,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     refreshStatus();
     refreshSounds();
     refreshEvents();
+    refreshRules();
     setInterval(refreshStatus, 10000);
     setInterval(refreshEvents, 10000);
   </script>
