@@ -1599,6 +1599,21 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     .security-explain {margin-top:0.55rem; font-size:0.78rem; line-height:1.35; color:var(--text-light);}
     .check-row {display:flex; gap:0.45rem; align-items:center; margin-top:0.55rem; font-size:0.85rem; color:#d8e2ee;}
     .check-row input {width:auto;}
+    .event-list {display:grid; gap:0.45rem;}
+    .event-empty {color:var(--text-light); font-size:0.9rem;}
+    .event-item {
+      display:grid;
+      grid-template-columns:minmax(0, 1fr) auto;
+      gap:0.2rem 0.75rem;
+      padding:0.65rem 0;
+      border-bottom:1px solid rgba(143,160,179,0.14);
+    }
+    .event-item:last-child {border-bottom:none;}
+    .event-main {min-width:0; color:#d8e2ee; font-size:0.92rem; overflow-wrap:anywhere;}
+    .event-age {color:var(--text-light); font-size:0.78rem; white-space:nowrap;}
+    .event-meta {grid-column:1 / -1; color:var(--text-light); font-size:0.78rem; overflow-wrap:anywhere;}
+    .event-actions {display:flex; justify-content:flex-end; margin-top:0.75rem;}
+    .event-actions button {width:auto; min-width:auto; margin:0; padding:0.5rem 0.75rem; font-size:0.85rem; line-height:1.1; border-radius:8px;}
     .btn-secondary {background:linear-gradient(180deg, rgba(148,163,184,0.22), rgba(71,85,105,0.32));}
     .btn-secondary:hover:not(:disabled) {background:linear-gradient(180deg, rgba(148,163,184,0.3), rgba(71,85,105,0.42));}
     .volume-box {margin-top: 0.5rem; padding:0.8rem; background:rgba(4,9,16,0.28); border:1px solid rgba(143,160,179,0.16); border-radius:8px; text-align:center;}
@@ -1751,18 +1766,18 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       .metrics-grid {grid-template-columns:1fr; gap:0.75rem;}
       .tabbar {
         display:grid;
-        grid-template-columns:repeat(4, minmax(0, 1fr));
+        grid-template-columns:repeat(5, minmax(0, 1fr));
         gap:0.35rem;
         margin:0.5rem 0 1rem;
       }
       .tabbar button {
         width:100%;
         margin:0;
-        padding:0.55rem 0.35rem;
+        padding:0.55rem 0.2rem;
         border-radius:8px;
         background:rgba(255,255,255,0.075);
         color:#d8e2ee;
-        font-size:0.82rem;
+        font-size:0.76rem;
         border:1px solid rgba(143,160,179,0.16);
         box-shadow:none;
       }
@@ -1822,6 +1837,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     <div class="tabbar" role="tablist" aria-label="Manage sections">
       <button class="active" type="button" data-tab="chimes" title="Select, preview, or delete uploaded chime sounds">Chimes</button>
       <button type="button" data-tab="upload" title="Upload a new WAV or MP3 chime sound">Upload</button>
+      <button type="button" data-tab="events" title="View recent sensor and chime events">Events</button>
       <button type="button" data-tab="device" title="Adjust volume, device name, Wi-Fi, and advanced network options">Device</button>
       <button type="button" data-tab="security" title="Set the LAN admin password and manage protected actions">Security</button>
     </div>
@@ -1849,6 +1865,16 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
               <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
             </div>
           </form>
+        </div>
+
+        <div class="section tab-panel" data-panel="events">
+          <h2>Events</h2>
+          <div id="eventList" class="event-list">
+            <div class="event-empty">Loading...</div>
+          </div>
+          <div class="event-actions">
+            <button id="refreshEventsBtn" type="button" title="Refresh recent events">Refresh</button>
+          </div>
         </div>
       </div>
 
@@ -1940,6 +1966,8 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     const wifiBar = document.getElementById('wifiBar');
     const fsText = document.getElementById('fsText');
     const fsBar = document.getElementById('fsBar');
+    const eventList = document.getElementById('eventList');
+    const refreshEventsBtn = document.getElementById('refreshEventsBtn');
     const deviceStatus = document.getElementById('deviceStatus');
     const deviceActive = document.getElementById('deviceActive');
     const deviceIp = document.getElementById('deviceIp');
@@ -2021,6 +2049,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     function setActiveTab(name) {
       tabButtons.forEach(btn => btn.classList.toggle('active', btn.dataset.tab === name));
       tabPanels.forEach(panel => panel.classList.toggle('active', panel.dataset.panel === name));
+      if (name === 'events') refreshEvents();
     }
 
     function selectedLanDnsSuffix() {
@@ -2183,6 +2212,62 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         .catch(() => {});
     }
 
+    function eventAge(ms) {
+      if (ms < 1000) return 'now';
+      const sec = Math.floor(ms / 1000);
+      if (sec < 60) return `${sec}s`;
+      const min = Math.floor(sec / 60);
+      if (min < 60) return `${min}m`;
+      const hr = Math.floor(min / 60);
+      if (hr < 24) return `${hr}h`;
+      return `${Math.floor(hr / 24)}d`;
+    }
+
+    function eventTitle(item) {
+      const sensor = item.sensor || item.source || 'chime';
+      const event = item.event || 'trigger';
+      const type = item.type ? ` ${item.type}` : '';
+      return `${sensor}${type}: ${event}`;
+    }
+
+    function refreshEvents() {
+      fetch('/events')
+        .then(r => r.json())
+        .then(data => {
+          const items = data.items || [];
+          if (!items.length) {
+            eventList.innerHTML = '<div class="event-empty">No events yet.</div>';
+            return;
+          }
+          eventList.innerHTML = '';
+          items.slice(0, 20).forEach(item => {
+            const row = document.createElement('div');
+            row.className = 'event-item';
+            const main = document.createElement('div');
+            main.className = 'event-main';
+            main.textContent = eventTitle(item);
+            const age = document.createElement('div');
+            age.className = 'event-age';
+            age.textContent = eventAge(Number(item.ageMs || 0));
+            const meta = document.createElement('div');
+            meta.className = 'event-meta';
+            const bits = [
+              item.soundPath || '',
+              item.eventId ? `id ${item.eventId}` : '',
+              item.source ? `via ${item.source}` : ''
+            ].filter(Boolean);
+            meta.textContent = bits.join(' · ');
+            row.appendChild(main);
+            row.appendChild(age);
+            row.appendChild(meta);
+            eventList.appendChild(row);
+          });
+        })
+        .catch(() => {
+          eventList.innerHTML = '<div class="event-empty">Unable to load events.</div>';
+        });
+    }
+
     function refreshSounds() {
       fetch('/list')
         .then(r => r.json())
@@ -2227,6 +2312,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
               fetchAuth(endpoint)
                 .then(r => {
                   if (!r.ok) throw new Error(`Play failed (${r.status})`);
+                  setTimeout(refreshEvents, 250);
                 })
                 .catch(err => alert(err.message || 'Play failed'));
             });
@@ -2361,6 +2447,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       if (lanDnsCustomRadio.checked) saveDeviceSettings('LAN DNS saved');
     });
     saveSecurityBtn.addEventListener('click', saveSecurity);
+    refreshEventsBtn.addEventListener('click', refreshEvents);
     addPasswordBtn.addEventListener('click', () => {
       tokenInput.focus();
       tokenInput.scrollIntoView({block: 'center', behavior: 'smooth'});
@@ -2380,7 +2467,9 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     updateFileInfo();
     refreshStatus();
     refreshSounds();
+    refreshEvents();
     setInterval(refreshStatus, 10000);
+    setInterval(refreshEvents, 10000);
   </script>
 </body>
 </html>

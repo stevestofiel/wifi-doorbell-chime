@@ -19,6 +19,7 @@ useful device.
 - [x] Distributed multi-chime network model documented.
 - [x] Chime event log and indicator behavior.
 - [x] Event IDs and duplicate suppression.
+- [x] Local chime event log UI.
 - [ ] Per-sensor sound rules.
 - [ ] Peer chime configuration.
 - [ ] Peer log aggregation in the chime UI.
@@ -28,13 +29,13 @@ useful device.
 
 ## Next Session Plan
 
-Focus: make recent events visible in the chime web UI.
+Focus: add the first configurable sensor-to-sound rules.
 
-1. Add an Events tab or panel to the main chime page.
-2. Fetch `/events` on demand and after local playback actions.
-3. Show event time/age, sensor ID, type, event, source, and sound path.
-4. Keep the layout compact so it works well on mobile.
-5. Leave peer log aggregation for the later multi-chime slice.
+1. Define the small rule data model for sensor/type/event to sound key/path.
+2. Add a JSON endpoint for reading and saving rules.
+3. Use rules in `/trigger` before falling back to the active sound.
+4. Keep existing `sound` and `key` query parameters as explicit overrides.
+5. Add the rule editor to the web UI after the backend is stable.
 
 ## Product Variants
 
