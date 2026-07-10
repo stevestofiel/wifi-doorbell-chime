@@ -43,6 +43,7 @@ float currentGain = 1.0f;
 String activeFilePath        = "/chime.wav";
 const char* SOUNDS_FILE      = "/sounds.json";
 const char* DEVICE_FILE      = "/device.json";
+const char* RULES_FILE       = "/rules.json";
 String      displayFilename  = "No chime loaded";
 bool        uploadSucceeded  = false;
 String      uploadError      = "";
@@ -75,6 +76,12 @@ struct ChimeEvent {
   String soundKey;
   String soundPath;
   unsigned long timeMs = 0;
+};
+
+struct SoundResolution {
+  String path;
+  String key;
+  String source;
 };
 
 ChimeEvent eventLog[EVENT_LOG_SIZE];
@@ -429,6 +436,120 @@ void handleList(AsyncWebServerRequest *request) {
   request->send(200, "application/json", payload);
 }
 
+String requestValue(AsyncWebServerRequest *request, const char* name) {
+  if (request->hasParam(name, true)) return request->getParam(name, true)->value();
+  if (request->hasParam(name)) return request->getParam(name)->value();
+  return "";
+}
+
+bool loadRulesDocument(DynamicJsonDocument &doc) {
+  if (SPIFFS.exists(RULES_FILE)) {
+    File f = SPIFFS.open(RULES_FILE, "r");
+    if (f) {
+      DeserializationError error = deserializeJson(doc, f);
+      f.close();
+      if (!error && doc["rules"].is<JsonArray>()) return true;
+    }
+  }
+  doc.clear();
+  doc.createNestedArray("rules");
+  return true;
+}
+
+bool saveRulesDocument(DynamicJsonDocument &doc) {
+  File f = SPIFFS.open(RULES_FILE, "w");
+  if (!f) return false;
+  serializeJson(doc, f);
+  f.close();
+  return true;
+}
+
+void addDefaultRuleJson(JsonArray defaults, const char* sensor, const char* type, const char* eventName, const char* key) {
+  JsonObject item = defaults.createNestedObject();
+  item["sensor"] = sensor;
+  item["type"] = type;
+  item["event"] = eventName;
+  item["key"] = key;
+}
+
+void appendDefaultSoundRules(JsonArray defaults) {
+  addDefaultRuleJson(defaults, "", "doorbell", "press", "doorbell");
+  addDefaultRuleJson(defaults, "mailbox", "mailbox", "flag-raised", "mailbox");
+  addDefaultRuleJson(defaults, "", "motion", "detected", "motion");
+  addDefaultRuleJson(defaults, "", "package", "detected", "package");
+}
+
+void handleRulesGet(AsyncWebServerRequest *request) {
+  DynamicJsonDocument doc(4096);
+  loadRulesDocument(doc);
+  JsonArray defaults = doc.createNestedArray("defaults");
+  appendDefaultSoundRules(defaults);
+
+  String payload;
+  serializeJson(doc, payload);
+  request->send(200, "application/json", payload);
+}
+
+void handleRulesPost(AsyncWebServerRequest *request) {
+  if (!requireAdminAuth(request)) return;
+
+  String sensor = normalizeRuleField(requestValue(request, "sensor"));
+  String type = normalizeRuleField(requestValue(request, "type"));
+  String eventName = normalizeRuleField(requestValue(request, "event"));
+  String key = normalizeRuleField(requestValue(request, "key"));
+  String path = requestValue(request, "path");
+  String removeValue = requestValue(request, "delete");
+  bool shouldDelete = (removeValue == "1" || removeValue == "true" || removeValue == "on");
+
+  if (sensor.length() == 0 && type.length() == 0 && eventName.length() == 0) {
+    request->send(400, "application/json", "{\"ok\":false,\"error\":\"Missing rule selector\"}");
+    return;
+  }
+
+  DynamicJsonDocument doc(4096);
+  loadRulesDocument(doc);
+  JsonArray rules = doc["rules"].as<JsonArray>();
+
+  for (int i = (int)rules.size() - 1; i >= 0; --i) {
+    JsonObject rule = rules[i];
+    if (normalizeRuleField(rule["sensor"] | "") == sensor &&
+        normalizeRuleField(rule["type"] | "") == type &&
+        normalizeRuleField(rule["event"] | "") == eventName) {
+      rules.remove(i);
+    }
+  }
+
+  if (!shouldDelete) {
+    SoundResolution test;
+    if (!resolvePathOrKey(path, key, test, "rule")) {
+      request->send(404, "application/json", "{\"ok\":false,\"error\":\"Sound not found\"}");
+      return;
+    }
+
+    JsonObject rule = rules.createNestedObject();
+    rule["sensor"] = sensor;
+    rule["type"] = type;
+    rule["event"] = eventName;
+    rule["key"] = test.key;
+    rule["path"] = test.path;
+  }
+
+  if (!saveRulesDocument(doc)) {
+    request->send(500, "application/json", "{\"ok\":false,\"error\":\"Save failed\"}");
+    return;
+  }
+
+  DynamicJsonDocument response(4096);
+  loadRulesDocument(response);
+  response["ok"] = true;
+  JsonArray defaults = response.createNestedArray("defaults");
+  appendDefaultSoundRules(defaults);
+
+  String payload;
+  serializeJson(response, payload);
+  request->send(200, "application/json", payload);
+}
+
 void handleSetActive(AsyncWebServerRequest *request) {
   if (!requireAdminAuth(request)) return;
   if (!request->hasParam("path")) {
@@ -605,6 +726,103 @@ bool resolveSoundByKey(const String &key, String &pathOut, String &nameOut) {
     file = root.openNextFile();
   }
   return false;
+}
+
+String normalizeRuleField(const String &input) {
+  String out = sanitizeToken(input);
+  out.toLowerCase();
+  return out;
+}
+
+bool ruleFieldMatches(const String &ruleValue, const String &eventValue) {
+  return ruleValue.length() == 0 || ruleValue == eventValue;
+}
+
+String defaultSoundKeyForEvent(const String &sensor, const String &type, const String &eventType) {
+  String s = normalizeRuleField(sensor);
+  String t = normalizeRuleField(type);
+  String e = normalizeRuleField(eventType);
+
+  if (t == "mailbox" || s.indexOf("mailbox") >= 0 || e == "flag-raised" || e == "mail") return "mailbox";
+  if (t == "motion" || t == "pir" || e == "motion" || e == "detected") return "motion";
+  if (t == "package" || e == "package" || e == "package-detected") return "package";
+  if (t == "doorbell" || e == "press" || e == "pressed") return "doorbell";
+  return "";
+}
+
+bool resolvePathOrKey(const String &path, const String &key, SoundResolution &result, const String &source) {
+  String cleanPath = path;
+  if (cleanPath.length() > 0 && !cleanPath.startsWith("/")) cleanPath = "/" + cleanPath;
+  if (cleanPath.length() > 0 && SPIFFS.exists(cleanPath)) {
+    result.path = cleanPath;
+    result.key = key;
+    result.source = source;
+    return true;
+  }
+
+  String cleanKey = normalizeRuleField(key);
+  if (cleanKey.length() > 0) {
+    String resolvedPath;
+    String unusedName;
+    if (resolveSoundByKey(cleanKey, resolvedPath, unusedName)) {
+      result.path = resolvedPath;
+      result.key = cleanKey;
+      result.source = source;
+      return true;
+    }
+  }
+  return false;
+}
+
+bool resolveRuleSound(const String &sensor, const String &type, const String &eventType, SoundResolution &result) {
+  if (!SPIFFS.exists(RULES_FILE)) return false;
+  File f = SPIFFS.open(RULES_FILE, "r");
+  if (!f) return false;
+
+  DynamicJsonDocument doc(4096);
+  DeserializationError error = deserializeJson(doc, f);
+  f.close();
+  if (error || !doc.containsKey("rules")) return false;
+
+  String sensorKey = normalizeRuleField(sensor);
+  String typeKey = normalizeRuleField(type);
+  String eventKey = normalizeRuleField(eventType);
+
+  for (JsonObject rule : doc["rules"].as<JsonArray>()) {
+    String ruleSensor = normalizeRuleField(rule["sensor"] | "");
+    String ruleType = normalizeRuleField(rule["type"] | "");
+    String ruleEvent = normalizeRuleField(rule["event"] | "");
+    if (!ruleFieldMatches(ruleSensor, sensorKey)) continue;
+    if (!ruleFieldMatches(ruleType, typeKey)) continue;
+    if (!ruleFieldMatches(ruleEvent, eventKey)) continue;
+
+    String path = rule["path"] | "";
+    String key = rule["key"] | "";
+    if (resolvePathOrKey(path, key, result, "rule")) return true;
+  }
+  return false;
+}
+
+bool resolveSensorSound(const String &explicitKey,
+                        const String &sensor,
+                        const String &type,
+                        const String &eventType,
+                        SoundResolution &result) {
+  String cleanExplicitKey = normalizeRuleField(explicitKey);
+  if (cleanExplicitKey.length() > 0) {
+    if (resolvePathOrKey("", cleanExplicitKey, result, "explicit")) return true;
+    return false;
+  }
+
+  if (resolveRuleSound(sensor, type, eventType, result)) return true;
+
+  String defaultKey = defaultSoundKeyForEvent(sensor, type, eventType);
+  if (defaultKey.length() > 0 && resolvePathOrKey("", defaultKey, result, "default")) return true;
+
+  result.path = activeFilePath;
+  result.key = "";
+  result.source = "active";
+  return true;
 }
 
 // ── Load sounds config ─────────────────────────────────────────────────────
@@ -934,21 +1152,20 @@ void handleSensorTrigger(AsyncWebServerRequest *request) {
     return;
   }
 
-  if (soundKey.length() > 0) {
-    String path;
-    String unusedName;
-    if (!resolveSoundByKey(soundKey, path, unusedName)) {
+  SoundResolution sound;
+  if (!resolveSensorSound(soundKey, sensorId, sensorType, eventType, sound)) {
+    if (soundKey.length() > 0) {
       sendTriggerResponse(request, 404, "Sound key not found");
       return;
     }
-    playChimePath(path);
-    recordChimeEvent(eventId, sensorId, sensorType, eventType, "http", soundKey, path);
-    sendTriggerResponse(request, 200, "Sensor trigger OK");
-    return;
   }
 
-  playChime();
-  recordChimeEvent(eventId, sensorId, sensorType, eventType, "http", "", activeFilePath);
+  if (sound.path == activeFilePath) {
+    playChime();
+  } else {
+    playChimePath(sound.path);
+  }
+  recordChimeEvent(eventId, sensorId, sensorType, eventType, "http", sound.key, sound.path);
   sendTriggerResponse(request, 200, "Sensor trigger OK");
 }
 
@@ -2659,6 +2876,8 @@ void setup() {
   server.on("/trigger", HTTP_GET, [](AsyncWebServerRequest *request){ handleSensorTrigger(request); });
   server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request){ handleStatus(request); });
   server.on("/events", HTTP_GET, [](AsyncWebServerRequest *request){ handleEvents(request); });
+  server.on("/rules", HTTP_GET, [](AsyncWebServerRequest *request){ handleRulesGet(request); });
+  server.on("/rules", HTTP_POST, [](AsyncWebServerRequest *request){ handleRulesPost(request); });
   server.on("/list", HTTP_GET, [](AsyncWebServerRequest *request){ handleList(request); });
   server.on("/setgain", HTTP_GET, [](AsyncWebServerRequest *request){ handleSetGain(request); });
   server.on("/setlabel", HTTP_POST, [](AsyncWebServerRequest *request){ handleSetLabel(request); });
