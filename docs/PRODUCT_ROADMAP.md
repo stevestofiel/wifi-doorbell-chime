@@ -16,6 +16,7 @@ useful device.
 - [x] Sensor captive portal setup.
 - [x] Sensor reset/setup gesture.
 - [x] Sensor base firmware and driver refactor.
+- [x] Wi-Fi radar sensor prototype scaffold.
 - [x] Distributed multi-chime network model documented.
 - [x] Chime event log and indicator behavior.
 - [x] Event IDs and duplicate suppression.

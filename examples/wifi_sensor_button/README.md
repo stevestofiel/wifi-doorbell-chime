@@ -10,9 +10,9 @@ ESP32-S3.
 
 This example is split so future sensor types can reuse the same base behavior:
 
-- `SensorConfig.h`: Wi-Fi setup, captive portal fields, saved sensor config,
+- `../wifi_sensor_common/SensorConfig.h`: Wi-Fi setup, captive portal fields, saved sensor config,
   and setup-reset behavior.
-- `TriggerClient.h`: Wi-Fi reconnect and HTTP `/trigger` calls.
+- `../wifi_sensor_common/TriggerClient.h`: Wi-Fi reconnect and HTTP `/trigger` calls.
 - `ButtonTouchDriver.h`: physical button and capacitive touch input handling.
 - `wifi_sensor_button.ino`: wires the config manager, trigger client, and
   selected driver together.

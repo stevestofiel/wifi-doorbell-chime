@@ -19,6 +19,17 @@ class SensorConfigManager {
 public:
   SensorConfig config;
 
+  SensorConfigManager(const char* defaultSensorId = "bench-button",
+                      const char* defaultSensorType = "doorbell",
+                      const char* defaultSensorEvent = "press")
+    : defaultSensorId(defaultSensorId),
+      defaultSensorType(defaultSensorType),
+      defaultSensorEvent(defaultSensorEvent) {
+    config.sensorId = defaultSensorId;
+    config.sensorType = defaultSensorType;
+    config.sensorEvent = defaultSensorEvent;
+  }
+
   void begin(bool forceSetupPortal) {
     load();
     if (forceSetupPortal) {
@@ -74,9 +85,9 @@ public:
     SensorConfig next;
     next.chimeBaseUrl = cleanUrl(String(chimeParam.getValue()));
     next.chimeToken = String(tokenParam.getValue());
-    next.sensorId = cleanId(String(idParam.getValue()), "bench-button", 31);
-    next.sensorType = cleanId(String(typeParam.getValue()), "doorbell", 23);
-    next.sensorEvent = cleanId(String(eventParam.getValue()), "press", 23);
+    next.sensorId = cleanId(String(idParam.getValue()), defaultSensorId, 31);
+    next.sensorType = cleanId(String(typeParam.getValue()), defaultSensorType, 23);
+    next.sensorEvent = cleanId(String(eventParam.getValue()), defaultSensorEvent, 23);
 
     bool changed = next.chimeBaseUrl != config.chimeBaseUrl ||
                    next.chimeToken != config.chimeToken ||
@@ -103,6 +114,9 @@ public:
 
 private:
   Preferences prefs;
+  const char* defaultSensorId;
+  const char* defaultSensorType;
+  const char* defaultSensorEvent;
 
   static constexpr const char* SETUP_AP_SSID = "ChimeSensor";
   static constexpr const char* SETUP_AP_PASSWORD = "config123";
@@ -165,9 +179,9 @@ private:
     prefs.end();
 
     config.chimeBaseUrl = cleanUrl(config.chimeBaseUrl);
-    config.sensorId = cleanId(config.sensorId, "bench-button", 31);
-    config.sensorType = cleanId(config.sensorType, "doorbell", 23);
-    config.sensorEvent = cleanId(config.sensorEvent, "press", 23);
+    config.sensorId = cleanId(config.sensorId, defaultSensorId, 31);
+    config.sensorType = cleanId(config.sensorType, defaultSensorType, 23);
+    config.sensorEvent = cleanId(config.sensorEvent, defaultSensorEvent, 23);
   }
 
   void save() {
@@ -186,6 +200,9 @@ private:
     prefs.clear();
     prefs.end();
     config = SensorConfig();
+    config.sensorId = defaultSensorId;
+    config.sensorType = defaultSensorType;
+    config.sensorEvent = defaultSensorEvent;
     Serial.println("Config: cleared sensor settings");
   }
 
