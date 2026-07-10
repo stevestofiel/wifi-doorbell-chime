@@ -31,13 +31,15 @@ useful device.
 
 ## Next Session Plan
 
-Focus: add compact built-in default sound assets.
+Focus: standardize the required remote sensor setup/test/service button.
 
-1. Pick the first tiny embedded sound for `doorbell`.
-2. Add a resolver path for built-in audio keys that do not require SPIFFS.
-3. Add mailbox, motion, and package defaults after the first asset works.
-4. Keep user-uploaded rules higher priority than built-in defaults.
-5. Smoke test fallback behavior with no custom rule configured.
+1. Add a shared `sensors/common` service-button helper.
+2. Refactor button/touch and radar firmware to use the shared setup/test
+   button behavior.
+3. Document the required `GPIO3` button contract for all remote sensors.
+4. Compile both current sensor sketches.
+5. Prompt for physical bench tests: boot-hold setup reset, short-press test
+   event, radar motion event, and chime event-log confirmation.
 
 ## Product Variants
 
