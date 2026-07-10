@@ -35,6 +35,8 @@ AsyncWebServer server(80);
 const int BUTTON_PIN = 13;
 const int LED_PIN = 48; // onboard blue LED
 bool wasPressed = false;
+bool ledPulseActive = false;
+unsigned long ledPulseUntilMs = 0;
 
 float currentGain = 1.0f;
 
@@ -60,6 +62,25 @@ bool        wifiWasConnected = false;
 unsigned long lastWiFiReconnectMs = 0;
 
 const unsigned long WIFI_RECONNECT_INTERVAL_MS = 10000;
+const unsigned long LED_PULSE_MS = 160;
+const size_t EVENT_LOG_SIZE = 20;
+
+struct ChimeEvent {
+  uint32_t seq = 0;
+  String eventId;
+  String sensor;
+  String type;
+  String event;
+  String source;
+  String soundKey;
+  String soundPath;
+  unsigned long timeMs = 0;
+};
+
+ChimeEvent eventLog[EVENT_LOG_SIZE];
+size_t eventLogCount = 0;
+size_t eventLogNext = 0;
+uint32_t eventSeq = 0;
 
 void onConfigSaved() {
   shouldReboot = true;
@@ -210,6 +231,75 @@ void sendTriggerResponse(AsyncWebServerRequest *request, int statusCode, const c
   request->send(statusCode, "text/plain", text);
 }
 
+void pulseEventLed() {
+  digitalWrite(LED_PIN, HIGH);
+  ledPulseActive = true;
+  ledPulseUntilMs = millis() + LED_PULSE_MS;
+}
+
+void maintainEventLed() {
+  if (ledPulseActive && (long)(millis() - ledPulseUntilMs) >= 0) {
+    digitalWrite(LED_PIN, LOW);
+    ledPulseActive = false;
+  }
+}
+
+size_t eventLogIndexNewest(size_t offset) {
+  size_t newest = eventLogNext == 0 ? EVENT_LOG_SIZE - 1 : eventLogNext - 1;
+  return (newest + EVENT_LOG_SIZE - offset) % EVENT_LOG_SIZE;
+}
+
+const ChimeEvent* latestEvent() {
+  if (eventLogCount == 0) return nullptr;
+  return &eventLog[eventLogIndexNewest(0)];
+}
+
+void appendEventJson(JsonObject obj, const ChimeEvent &event) {
+  obj["seq"] = event.seq;
+  obj["eventId"] = event.eventId;
+  obj["sensor"] = event.sensor;
+  obj["type"] = event.type;
+  obj["event"] = event.event;
+  obj["source"] = event.source;
+  obj["soundKey"] = event.soundKey;
+  obj["soundPath"] = event.soundPath;
+  obj["timeMs"] = event.timeMs;
+  obj["ageMs"] = millis() - event.timeMs;
+}
+
+void recordChimeEvent(const String &eventId,
+                      const String &sensor,
+                      const String &type,
+                      const String &eventType,
+                      const String &source,
+                      const String &soundKey,
+                      const String &soundPath) {
+  ChimeEvent &entry = eventLog[eventLogNext];
+  entry.seq = ++eventSeq;
+  entry.eventId = eventId;
+  entry.eventId.trim();
+  if (entry.eventId.length() == 0) {
+    entry.eventId = "local-" + String(entry.seq);
+  } else if (entry.eventId.length() > 64) {
+    entry.eventId = entry.eventId.substring(0, 64);
+  }
+  entry.sensor = sensor;
+  entry.type = type;
+  entry.event = eventType.length() ? eventType : "trigger";
+  entry.source = source;
+  entry.soundKey = soundKey;
+  entry.soundPath = soundPath;
+  entry.timeMs = millis();
+
+  eventLogNext = (eventLogNext + 1) % EVENT_LOG_SIZE;
+  if (eventLogCount < EVENT_LOG_SIZE) eventLogCount++;
+
+  pulseEventLed();
+  Serial.printf("Event logged: id=%s sensor=%s type=%s event=%s source=%s sound=%s\n",
+                entry.eventId.c_str(), entry.sensor.c_str(), entry.type.c_str(),
+                entry.event.c_str(), entry.source.c_str(), entry.soundPath.c_str());
+}
+
 // ── Status JSON ────────────────────────────────────────────────────────────
 void handleStatus(AsyncWebServerRequest *request) {
   int rssi = (WiFi.status() == WL_CONNECTED) ? WiFi.RSSI() : -100;
@@ -220,7 +310,7 @@ void handleStatus(AsyncWebServerRequest *request) {
   size_t freeBytes = totalBytes >= usedBytes ? (totalBytes - usedBytes) : 0;
   int usedPct = totalBytes ? int((usedBytes * 100) / totalBytes) : 0;
 
-  StaticJsonDocument<768> doc;
+  StaticJsonDocument<1280> doc;
   doc["rssi"] = rssi;
   doc["signalPct"] = signalPct;
   doc["fsTotalKB"] = totalBytes / 1024.0;
@@ -237,6 +327,33 @@ void handleStatus(AsyncWebServerRequest *request) {
   doc["activePath"] = activeFilePath;
   doc["authEnabled"] = authToken.length() > 0;
   doc["playbackAuth"] = playbackAuth;
+  doc["eventCount"] = eventLogCount;
+
+  const ChimeEvent* last = latestEvent();
+  if (last) {
+    doc["lastEventId"] = last->eventId;
+    doc["lastEventSensor"] = last->sensor;
+    doc["lastEventType"] = last->type;
+    doc["lastEvent"] = last->event;
+    doc["lastEventSource"] = last->source;
+    doc["lastEventAgeMs"] = millis() - last->timeMs;
+  }
+
+  String payload;
+  serializeJson(doc, payload);
+  request->send(200, "application/json", payload);
+}
+
+void handleEvents(AsyncWebServerRequest *request) {
+  DynamicJsonDocument doc(6144);
+  doc["count"] = eventLogCount;
+  doc["capacity"] = EVENT_LOG_SIZE;
+  JsonArray items = doc.createNestedArray("items");
+
+  for (size_t i = 0; i < eventLogCount; ++i) {
+    JsonObject item = items.createNestedObject();
+    appendEventJson(item, eventLog[eventLogIndexNewest(i)]);
+  }
 
   String payload;
   serializeJson(doc, payload);
@@ -370,6 +487,7 @@ void handlePlayByKey(AsyncWebServerRequest *request) {
     return;
   }
   playChimePath(path);
+  recordChimeEvent("", "", "chime", "play-key", "http", key, path);
   sendTriggerResponse(request, 200, "Chime triggered OK");
 }
 
@@ -772,11 +890,13 @@ void handleChime(AsyncWebServerRequest *request) {
       return;
     }
     playChimePath(path);
+    recordChimeEvent("", "", "chime", "play-index", "http", String(idx), path);
     sendTriggerResponse(request, 200, "Chime triggered OK");
     return;
   }
 
   playChime();
+  recordChimeEvent("", "", "chime", "play-active", "http", "", activeFilePath);
   sendTriggerResponse(request, 200, "Chime triggered OK");
 }
 
@@ -790,6 +910,7 @@ void handleSensorTrigger(AsyncWebServerRequest *request) {
   String sensorId = request->hasParam("sensor") ? request->getParam("sensor")->value() : "";
   String sensorType = request->hasParam("type") ? request->getParam("type")->value() : "";
   String eventType = request->hasParam("event") ? request->getParam("event")->value() : "";
+  String eventId = request->hasParam("eventId") ? request->getParam("eventId")->value() : "";
   String soundKey = request->hasParam("sound") ? request->getParam("sound")->value() : "";
   if (soundKey.length() == 0 && request->hasParam("key")) {
     soundKey = request->getParam("key")->value();
@@ -807,11 +928,13 @@ void handleSensorTrigger(AsyncWebServerRequest *request) {
       return;
     }
     playChimePath(path);
+    recordChimeEvent(eventId, sensorId, sensorType, eventType, "http", soundKey, path);
     sendTriggerResponse(request, 200, "Sensor trigger OK");
     return;
   }
 
   playChime();
+  recordChimeEvent(eventId, sensorId, sensorType, eventType, "http", "", activeFilePath);
   sendTriggerResponse(request, 200, "Sensor trigger OK");
 }
 
@@ -2432,6 +2555,7 @@ void setup() {
   server.on("/chime", HTTP_GET, [](AsyncWebServerRequest *request){ handleChime(request); });
   server.on("/trigger", HTTP_GET, [](AsyncWebServerRequest *request){ handleSensorTrigger(request); });
   server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request){ handleStatus(request); });
+  server.on("/events", HTTP_GET, [](AsyncWebServerRequest *request){ handleEvents(request); });
   server.on("/list", HTTP_GET, [](AsyncWebServerRequest *request){ handleList(request); });
   server.on("/setgain", HTTP_GET, [](AsyncWebServerRequest *request){ handleSetGain(request); });
   server.on("/setlabel", HTTP_POST, [](AsyncWebServerRequest *request){ handleSetLabel(request); });
@@ -2470,6 +2594,7 @@ void setup() {
               return;
             }
             playChimePath(path);
+            recordChimeEvent("", "", "chime", "play-index", "http", String(idx), path);
             sendTriggerResponse(request, 200, "Chime triggered OK");
             return;
           }
@@ -2510,9 +2635,13 @@ void loop() {
   bool pressed = digitalRead(BUTTON_PIN) == LOW;
   if (pressed && !wasPressed) {
     delay(25);
-    if (digitalRead(BUTTON_PIN) == LOW) playChime();
+    if (digitalRead(BUTTON_PIN) == LOW) {
+      playChime();
+      recordChimeEvent("", "", "chime", "local-button", "button", "", activeFilePath);
+    }
   }
   wasPressed = pressed;
+  maintainEventLed();
 
   if (wav && wav->isRunning() && !wav->loop()) {
     wav->stop();

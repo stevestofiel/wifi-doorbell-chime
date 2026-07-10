@@ -17,7 +17,7 @@ useful device.
 - [x] Sensor reset/setup gesture.
 - [x] Sensor base firmware and driver refactor.
 - [x] Distributed multi-chime network model documented.
-- [ ] Chime event log and indicator behavior.
+- [x] Chime event log and indicator behavior.
 - [ ] Event IDs and duplicate suppression.
 - [ ] Per-sensor sound rules.
 - [ ] Peer chime configuration.
