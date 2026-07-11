@@ -107,6 +107,16 @@ LoRa sensors are for larger properties or locations where Wi-Fi is unreliable.
 - May send repeated packets and optionally listen for acknowledgements depending
   on power budget.
 
+The preferred product direction is to avoid a separate LoRa-only sensor family
+if possible. Instead, explore an optional external "range pod" that plugs into
+a common remote sensor base. A sensor without the pod can use Wi-Fi; the same
+sensor with the pod can use LoRa when Wi-Fi range is poor.
+
+The first ordered LoRa candidate is a pair of 915 MHz UART AT-command modules
+based on SX1262-class LoRa radio hardware. They are not intended for LoRaWAN or
+Meshtastic in this project; the first goal is a private point-to-point bench
+test that sends small semantic sensor-event packets.
+
 ## Core Architecture
 
 Remote triggering should be modeled as a sensor event rather than as a transport
@@ -382,6 +392,37 @@ LoRa-specific requirements:
 The LoRa gateway should translate packets into the shared `SensorEvent`
 structure and then call the same processing path as `/trigger`.
 
+### Optional Range Pod Concept
+
+The optional range pod concept keeps the base sensor enclosure small while
+allowing field upgrades for long-range locations such as driveways, gates,
+mailboxes, sheds, and outbuildings.
+
+Possible range pod interface:
+
+```text
+VCC or 3V3
+GND
+UART TX
+UART RX
+AUX / ready / interrupt
+M0 / mode
+M1 / mode
+RESET or SET, if required by the module
+DETECT
+```
+
+Design rules:
+
+- Do not finalize the expansion connector until the UART LoRa module pair is
+  bench-tested.
+- Prefer a private LoRa packet format that carries the same semantic event
+  fields as HTTP `/trigger`.
+- Keep the module mechanically separate from the base sensor enclosure if that
+  avoids bloating small indoor sensors.
+- Treat connector sealing, strain relief, keyed insertion, and antenna position
+  as first-class hardware requirements for outdoor pods.
+
 ## Security Model
 
 The current project is designed for trusted LAN use. Remote sensor support
@@ -477,6 +518,8 @@ LoRa UI:
 
 ### Phase 7: LoRa Gateway Chime
 
+- Bench-test the ordered UART LoRa module pair with simple point-to-point
+  packets.
 - Add compile-time LoRa gateway feature flag.
 - Add LoRa radio hardware docs.
 - Parse LoRa packets into `SensorEvent`.
@@ -484,6 +527,7 @@ LoRa UI:
 
 ### Phase 8: LoRa Sensor Firmware
 
+- Add a minimal UART LoRa sensor sender after the module pair is bench-tested.
 - Add compact packet protocol.
 - Add low-power wake/send behavior.
 - Add event counters and duplicate-aware retries.
@@ -491,7 +535,10 @@ LoRa UI:
 
 ## Open Decisions
 
-- Exact LoRa module and pins for the gateway hardware.
+- Whether the first LoRa path uses UART AT-command modules or direct SPI radio
+  modules after bench testing.
+- Exact range pod connector, pins, sealing, and detect behavior.
+- Whether LoRa is an external range pod, an internal option, or both.
 - Whether Wi-Fi sensor firmware lives in this repo or a companion repo.
 - Initial built-in default sound set and size budget.
 - Whether peer discovery should remain manual or eventually use mDNS discovery.
