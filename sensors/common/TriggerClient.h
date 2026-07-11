@@ -30,6 +30,7 @@ public:
       "/trigger?sensor=" + config.sensorId +
       "&type=" + config.sensorType +
       "&event=" + config.sensorEvent +
+      "&input=" + cleanSource(source) +
       "&eventId=" + eventId;
 
     int status = httpGet(withToken(triggerUrl));
@@ -52,6 +53,18 @@ private:
     id.replace(":", "");
     id.toLowerCase();
     return id + "-" + String(++eventCounter) + "-" + String(now, HEX);
+  }
+
+  static String cleanSource(const char* source) {
+    String out;
+    if (!source) return out;
+    for (size_t i = 0; source[i] != '\0' && out.length() < 24; ++i) {
+      char c = source[i];
+      if (c >= 'A' && c <= 'Z') c = char(c - 'A' + 'a');
+      bool allowed = (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_';
+      if (allowed) out += c;
+    }
+    return out;
   }
 
   bool ensureWiFi() {

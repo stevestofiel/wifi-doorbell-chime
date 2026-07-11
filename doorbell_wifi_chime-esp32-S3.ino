@@ -73,6 +73,7 @@ struct ChimeEvent {
   String type;
   String event;
   String source;
+  String input;
   String soundKey;
   String soundPath;
   unsigned long timeMs = 0;
@@ -286,6 +287,7 @@ void appendEventJson(JsonObject obj, const ChimeEvent &event) {
   obj["type"] = event.type;
   obj["event"] = event.event;
   obj["source"] = event.source;
+  obj["input"] = event.input;
   obj["soundKey"] = event.soundKey;
   obj["soundPath"] = event.soundPath;
   obj["timeMs"] = event.timeMs;
@@ -297,6 +299,7 @@ void recordChimeEvent(const String &eventId,
                       const String &type,
                       const String &eventType,
                       const String &source,
+                      const String &input,
                       const String &soundKey,
                       const String &soundPath) {
   ChimeEvent &entry = eventLog[eventLogNext];
@@ -309,6 +312,7 @@ void recordChimeEvent(const String &eventId,
   entry.type = type;
   entry.event = eventType.length() ? eventType : "trigger";
   entry.source = source;
+  entry.input = normalizeRuleField(input);
   entry.soundKey = soundKey;
   entry.soundPath = soundPath;
   entry.timeMs = millis();
@@ -620,7 +624,7 @@ void handlePlayByKey(AsyncWebServerRequest *request) {
     return;
   }
   playChimePath(path);
-  recordChimeEvent("", "", "chime", "play-key", "http", key, path);
+  recordChimeEvent("", "", "chime", "play-key", "http", "", key, path);
   sendTriggerResponse(request, 200, "Chime triggered OK");
 }
 
@@ -1120,13 +1124,13 @@ void handleChime(AsyncWebServerRequest *request) {
       return;
     }
     playChimePath(path);
-    recordChimeEvent("", "", "chime", "play-index", "http", String(idx), path);
+    recordChimeEvent("", "", "chime", "play-index", "http", "", String(idx), path);
     sendTriggerResponse(request, 200, "Chime triggered OK");
     return;
   }
 
   playChime();
-  recordChimeEvent("", "", "chime", "play-active", "http", "", activeFilePath);
+  recordChimeEvent("", "", "chime", "play-active", "http", "", "", activeFilePath);
   sendTriggerResponse(request, 200, "Chime triggered OK");
 }
 
@@ -1141,6 +1145,7 @@ void handleSensorTrigger(AsyncWebServerRequest *request) {
   String sensorType = request->hasParam("type") ? request->getParam("type")->value() : "";
   String eventType = request->hasParam("event") ? request->getParam("event")->value() : "";
   String eventId = request->hasParam("eventId") ? request->getParam("eventId")->value() : "";
+  String input = request->hasParam("input") ? request->getParam("input")->value() : "";
   String soundKey = request->hasParam("sound") ? request->getParam("sound")->value() : "";
   if (soundKey.length() == 0 && request->hasParam("key")) {
     soundKey = request->getParam("key")->value();
@@ -1165,7 +1170,7 @@ void handleSensorTrigger(AsyncWebServerRequest *request) {
   } else {
     playChimePath(sound.path);
   }
-  recordChimeEvent(eventId, sensorId, sensorType, eventType, "http", sound.key, sound.path);
+  recordChimeEvent(eventId, sensorId, sensorType, eventType, "http", input, sound.key, sound.path);
   sendTriggerResponse(request, 200, "Sensor trigger OK");
 }
 
@@ -2631,6 +2636,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             const bits = [
               item.soundPath || '',
               item.eventId ? `id ${item.eventId}` : '',
+              item.input ? `input ${item.input}` : '',
               item.source ? `via ${item.source}` : ''
             ].filter(Boolean);
             meta.textContent = bits.join(' · ');
@@ -3205,7 +3211,7 @@ void setup() {
               return;
             }
             playChimePath(path);
-            recordChimeEvent("", "", "chime", "play-index", "http", String(idx), path);
+            recordChimeEvent("", "", "chime", "play-index", "http", "", String(idx), path);
             sendTriggerResponse(request, 200, "Chime triggered OK");
             return;
           }
@@ -3248,7 +3254,7 @@ void loop() {
     delay(25);
     if (digitalRead(BUTTON_PIN) == LOW) {
       playChime();
-      recordChimeEvent("", "", "chime", "local-button", "button", "", activeFilePath);
+      recordChimeEvent("", "", "chime", "local-button", "button", "button", "", activeFilePath);
     }
   }
   wasPressed = pressed;

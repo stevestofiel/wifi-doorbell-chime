@@ -68,3 +68,18 @@ When a change affects hardware behavior, explicitly ask the user to verify:
 - If multiple ESP32 boards are present, distinguish them by serial output,
   firmware strings, MAC address, or another concrete signal before uploading.
 - Never guess the port when the chime and a sensor are both connected.
+
+## Arduino Commands
+
+- Compile chime firmware with its 2 MB app partition:
+  `arduino-cli compile --fqbn esp32:esp32:esp32s3:PartitionScheme=no_ota .`
+- Upload chime firmware with the same partition profile:
+  `arduino-cli upload -p <chime-port> --fqbn esp32:esp32:esp32s3:PartitionScheme=no_ota .`
+- Compile Wi-Fi button/touch sensor firmware:
+  `arduino-cli compile --fqbn esp32:esp32:esp32s3 sensors/wifi_button_touch`
+- Upload Wi-Fi button/touch sensor firmware:
+  `arduino-cli upload -p <sensor-port> --fqbn esp32:esp32:esp32s3 sensors/wifi_button_touch`
+- Compile Wi-Fi radar sensor firmware:
+  `arduino-cli compile --fqbn esp32:esp32:esp32s3 sensors/wifi_radar`
+- Upload Wi-Fi radar sensor firmware:
+  `arduino-cli upload -p <sensor-port> --fqbn esp32:esp32:esp32s3 sensors/wifi_radar`
