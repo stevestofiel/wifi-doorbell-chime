@@ -13,6 +13,8 @@ Treat both firmware and hardware documentation as product source, not examples.
 - Keep `docs/PRODUCT_ROADMAP.md` current whenever priorities, status, or next
   steps change.
 - Compile touched Arduino sketches when possible before committing.
+- Perform firmware uploads when requested; do not hand upload steps back to the
+  user unless blocked by hardware access.
 - Do not leave required physical validation implicit. Prompt the user to perform
   bench tests, wiring checks, upload tests, serial-log checks, and enclosure
   tests that Codex cannot perform.
@@ -56,3 +58,13 @@ When a change affects hardware behavior, explicitly ask the user to verify:
 - Chime event log entries after sensor triggers.
 - False-trigger behavior at the intended mounting location.
 - Battery, enclosure, and reset-button access before calling hardware stable.
+
+## Upload Discipline
+
+- Assume the chime and one or more sensor boards may be connected at the same
+  time.
+- Before uploading, identify the intended board and port. Start with
+  `arduino-cli board list`.
+- If multiple ESP32 boards are present, distinguish them by serial output,
+  firmware strings, MAC address, or another concrete signal before uploading.
+- Never guess the port when the chime and a sensor are both connected.
