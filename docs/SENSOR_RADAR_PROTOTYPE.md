@@ -31,6 +31,43 @@ The firmware treats `OUT` as an active-high 3.3 V signal and sends:
 sensor=bench-radar&type=motion&event=detected
 ```
 
+## Mini Breadboard Layout
+
+Use a mini breadboard as a temporary carrier, not a final mechanical design.
+Keep the current button/touch prototype intact as the known-good control.
+
+Recommended layout:
+
+- Place the ESP32-S3 Super Mini straddling the breadboard center gap with USB-C
+  facing outward for easy upload and serial access.
+- Put the service button near one edge so it can be pressed without touching
+  jumper wires.
+- Put the RCWL-0516 at the opposite edge with its antenna area facing away from
+  the ESP32 and jumper-wire bundle.
+- Run one short ground jumper from ESP32 `GND` to the radar `GND`.
+- Run one short power jumper from ESP32 `3.3V` to radar `3V3`.
+- Run one signal jumper from radar `OUT` to ESP32 `GPIO4`.
+- Run the service button from ESP32 `GPIO3` to `GND`.
+- Leave radar `VIN` and `CDS` unconnected.
+
+Text layout:
+
+```text
+USB-C edge
++-------------------------------+
+| ESP32-S3 Super Mini           |
+|   GPIO3 -- service button - GND
+|   GPIO4 <---- RCWL OUT        |
+|   3V3  ----> RCWL 3V3         |
+|   GND  ----> RCWL GND         |
+|                               |
+|                   RCWL antenna|
++-------------------------------+
+```
+
+For the first bench test, do not add battery hardware. USB power plus serial
+logs will make wiring and firmware problems much easier to separate.
+
 ## Prototype Checkpoints
 
 1. Upload `sensors/wifi_radar/wifi_radar.ino`.
@@ -52,6 +89,42 @@ sensor=bench-radar&type=motion&event=detected
 - Reset access: keep the physical service button reachable.
 - Serviceability: include labels for `3V3`, `GND`, `OUT`, and setup/reset on
   the prototype board.
+
+## Battery Options
+
+The radar sensor should be battery-capable eventually, but the RCWL-0516 is not
+ideal for a tiny long-life battery product because it is an always-on motion
+sensor. Treat battery tests as a separate power milestone after the USB bench
+prototype works.
+
+Options to consider:
+
+| Option | Pros | Cons | Best use |
+| --- | --- | --- | --- |
+| USB power bank | Easy, rechargeable, no regulator design | Bulky, not final-product shape | Early placement tests |
+| 1-cell LiPo plus 3.3 V regulator | Common, rechargeable, compact | Needs charging/protection/regulator board | Rechargeable prototype |
+| 18650 Li-ion plus regulator | More capacity | Larger enclosure, still needs protection/charging | Longer runtime experiments |
+| 3x AA or AAA to 3.3 V regulator | Easy to source, replaceable | Bigger, voltage varies as cells drain | Simple user-replaceable prototype |
+| 2x AA with boost regulator | Good availability | Boost converter idle current matters | Low-power sensor design later |
+
+First recommendation:
+
+1. Validate radar behavior on USB.
+2. Try a USB power bank for a real doorway placement test.
+3. Measure or estimate current before choosing LiPo vs AA/AAA.
+4. For a production-style sensor, consider a lower-power radar/PIR module or a
+   sleep/wake design before committing to RCWL-0516 on batteries.
+
+Battery design notes:
+
+- The ESP32 Wi-Fi transmit burst is power-hungry, so deep sleep matters for
+  button/reed/mailbox sensors.
+- RCWL-style radar usually wants to stay powered to detect motion, which limits
+  battery life.
+- Any onboard LED that blinks or stays on should be disabled or physically
+  removed for battery builds.
+- The required service button should use a wake-capable GPIO in future sleep
+  firmware.
 
 ## Firmware Tuning
 
