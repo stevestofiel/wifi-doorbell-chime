@@ -141,6 +141,23 @@ Example sounds:
 - Help button tone.
 - Security alert.
 
+Some safety events should become persistent alerts rather than one-time chimes.
+For example:
+
+- Freezer or refrigerator open should repeat until closed.
+- Water leak should repeat until dry or cleared.
+- Garage or gate left open should repeat until closed.
+- Help button should repeat until acknowledged or cleared.
+
+Future alert policies could support:
+
+```text
+play once
+repeat until clear
+escalate if unresolved
+optional all-clear sound
+```
+
 ### Property And Outbuildings
 
 Events for larger properties, detached buildings, or outdoor areas.

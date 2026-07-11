@@ -284,6 +284,35 @@ Initial sensor types:
 - `mailbox.open`
 - `motion.detected`
 
+## Alert Policies
+
+Some events are momentary and should play once, such as `doorbell.press`,
+`mailbox.open`, or `motion.detected`. Other events are stateful and may need
+attention until they clear, such as a freezer door left open, water leak,
+garage door left open, gate left open, or help button.
+
+Future rule behavior should support alert policies:
+
+```text
+play once
+repeat until clear
+escalate if unresolved
+optional all-clear sound
+```
+
+Example stateful pairs:
+
+```text
+freezer.open  -> repeat alert until freezer.closed
+leak.wet      -> repeat alert until leak.dry
+garage.open   -> repeat alert until garage.closed
+help.pressed  -> repeat alert until help.clear
+```
+
+This likely requires state tracking, timers, repeat limits, quiet-hour
+exceptions, and UI controls. It should be implemented after the basic sensor
+rules and event pipeline remain stable.
+
 ## Multi-Chime Behavior
 
 Multi-chime support should make older Wi-Fi-only chimes more useful, not
