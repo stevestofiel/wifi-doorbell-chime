@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include "RcwlRadarDriver.h"
+#include "../common/SensorButton.h"
 #include "../common/SensorConfig.h"
 #include "../common/TriggerClient.h"
 
@@ -11,11 +12,12 @@
 const int RADAR_PIN = 4;
 const int RADAR_ACTIVE_LEVEL = HIGH;
 
-// Setup/reset button: one side to GPIO3, other side to GND.
+// Service button: one side to GPIO3, other side to GND.
 const int SETUP_BUTTON_PIN = 3;
 
 // ---- Timing ----------------------------------------------------------------
 const unsigned long TRIGGER_COOLDOWN_MS = 10000;
+const unsigned long BUTTON_DEBOUNCE_MS = 40;
 const unsigned long RADAR_SETTLE_MS = 80;
 const unsigned long SETUP_HOLD_MS = 2000;
 
@@ -26,9 +28,14 @@ void emitSensorEvent(const char* source) {
   triggerClient.send(source);
 }
 
+SensorButton serviceButton(
+  SETUP_BUTTON_PIN,
+  BUTTON_DEBOUNCE_MS,
+  emitSensorEvent
+);
+
 RcwlRadarDriver driver(
   RADAR_PIN,
-  SETUP_BUTTON_PIN,
   RADAR_ACTIVE_LEVEL,
   RADAR_SETTLE_MS,
   emitSensorEvent
@@ -48,12 +55,14 @@ void setup() {
   Serial.printf("Trigger cooldown: %lu ms\n", TRIGGER_COOLDOWN_MS);
   Serial.printf("Setup hold: %lu ms\n", SETUP_HOLD_MS);
 
-  bool forceSetupPortal = driver.setupHeld(SETUP_HOLD_MS);
+  bool forceSetupPortal = serviceButton.setupHeld(SETUP_HOLD_MS);
   configManager.begin(forceSetupPortal);
+  serviceButton.begin();
   driver.begin();
 }
 
 void loop() {
+  serviceButton.poll();
   driver.poll();
   delay(10);
 }

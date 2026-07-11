@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include "ButtonTouchDriver.h"
+#include "../common/SensorButton.h"
 #include "../common/SensorConfig.h"
 #include "../common/TriggerClient.h"
 
@@ -27,11 +28,15 @@ void emitSensorEvent(const char* source) {
   triggerClient.send(source);
 }
 
-ButtonTouchDriver driver(
+SensorButton serviceButton(
   BUTTON_PIN,
+  DEBOUNCE_MS,
+  emitSensorEvent
+);
+
+ButtonTouchDriver driver(
   TOUCH_PIN,
   TOUCH_ACTIVE_LEVEL,
-  DEBOUNCE_MS,
   TOUCH_HOLD_MS,
   emitSensorEvent
 );
@@ -45,18 +50,20 @@ void setup() {
 
   Serial.println();
   Serial.println("Wi-Fi sensor prototype starting");
-  Serial.printf("Button GPIO: %d\n", BUTTON_PIN);
+  Serial.printf("Service button GPIO: %d\n", BUTTON_PIN);
   Serial.printf("Touch GPIO: %d\n", TOUCH_PIN);
   Serial.printf("Touch hold: %lu ms\n", TOUCH_HOLD_MS);
   Serial.printf("Setup hold: %lu ms\n", SETUP_HOLD_MS);
-  Serial.println("Raw input changes will print as button=<0|1> touch=<0|1>");
+  Serial.println("Raw input changes will print as serviceButton=<0|1> or touch=<0|1>");
 
-  bool forceSetupPortal = driver.setupHeld(SETUP_HOLD_MS);
+  bool forceSetupPortal = serviceButton.setupHeld(SETUP_HOLD_MS);
   configManager.begin(forceSetupPortal);
+  serviceButton.begin();
   driver.begin();
 }
 
 void loop() {
+  serviceButton.poll();
   driver.poll();
   delay(10);
 }

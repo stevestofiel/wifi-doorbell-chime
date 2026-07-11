@@ -17,6 +17,7 @@ useful device.
 - [x] Sensor reset/setup gesture.
 - [x] Sensor base firmware and driver refactor.
 - [x] Wi-Fi radar sensor prototype scaffold.
+- [x] Shared remote sensor setup/test/service button helper.
 - [x] Distributed multi-chime network model documented.
 - [x] Chime event log and indicator behavior.
 - [x] Event IDs and duplicate suppression.
@@ -31,15 +32,13 @@ useful device.
 
 ## Next Session Plan
 
-Focus: standardize the required remote sensor setup/test/service button.
+Focus: physically validate the shared remote sensor setup/test/service button.
 
-1. Add a shared `sensors/common` service-button helper.
-2. Refactor button/touch and radar firmware to use the shared setup/test
-   button behavior.
-3. Document the required `GPIO3` button contract for all remote sensors.
-4. Compile both current sensor sketches.
-5. Prompt for physical bench tests: boot-hold setup reset, short-press test
-   event, radar motion event, and chime event-log confirmation.
+1. Upload the button/touch firmware and verify boot-hold setup reset.
+2. Verify short-press sends a `doorbell.press` event.
+3. Upload the radar firmware and verify boot-hold setup reset.
+4. Verify radar service-button short-press sends a test `motion.detected` event.
+5. Verify RCWL radar motion sends `motion.detected` and tune cooldown if needed.
 
 ## Product Variants
 

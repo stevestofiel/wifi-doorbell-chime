@@ -12,8 +12,9 @@ This sensor firmware is split so future sensor types can reuse the same base beh
 
 - `../common/SensorConfig.h`: Wi-Fi setup, captive portal fields, saved sensor config,
   and setup-reset behavior.
+- `../common/SensorButton.h`: required setup/test/service button behavior.
 - `../common/TriggerClient.h`: Wi-Fi reconnect and HTTP `/trigger` calls.
-- `ButtonTouchDriver.h`: physical button and capacitive touch input handling.
+- `ButtonTouchDriver.h`: capacitive touch input handling.
 - `wifi_button_touch.ino`: wires the config manager, trigger client, and
   selected driver together.
 
@@ -23,7 +24,7 @@ copying the whole sketch.
 
 ## Wiring
 
-Button:
+Service button:
 
 - One side to `GPIO3`
 - Other side to `GND`
@@ -70,7 +71,8 @@ http://192.168.1.42
 If a full endpoint such as `/trigger` or `/chime` is pasted, the sketch trims it
 back to the chime base URL before saving.
 
-The sketch calls `/trigger` with a semantic event:
+The sketch calls `/trigger` with a semantic event when the service button is
+pressed or the touch input is held:
 
 ```text
 /trigger?sensor=bench-button&type=doorbell&event=press&eventId=<sensor-generated-id>
@@ -80,8 +82,9 @@ The `eventId` is generated from the sensor MAC address, a local counter, and
 uptime so the chime can ignore duplicate retries. It falls back to `/chime`
 when testing against older chime firmware that does not have `/trigger` yet.
 
-## Reset Setup
+## Service Button
 
-To clear saved Wi-Fi and sensor settings, hold the physical button while
-resetting or powering on the board. Keep holding for about 2 seconds, then
-release. The sensor will start the `ChimeSensor` setup portal again.
+- Short press while running sends the configured sensor event.
+- Hold while resetting or powering on the board for about 2 seconds to clear
+  saved Wi-Fi and sensor settings. The sensor will start the `ChimeSensor`
+  setup portal again.

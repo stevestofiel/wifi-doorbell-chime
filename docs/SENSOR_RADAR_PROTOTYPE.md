@@ -22,7 +22,7 @@ and `CDS` disconnected until the basic motion event path is working.
 - RCWL `3V3` to ESP32 `3.3V`
 - RCWL `GND` to ESP32 `GND`
 - RCWL `OUT` to ESP32 `GPIO4`
-- Setup/reset button between ESP32 `GPIO3` and `GND`
+- Service button between ESP32 `GPIO3` and `GND`
 - Power the ESP32 over USB for initial serial logging
 
 The firmware treats `OUT` as an active-high 3.3 V signal and sends:
@@ -35,10 +35,11 @@ sensor=bench-radar&type=motion&event=detected
 
 1. Upload `sensors/wifi_radar/wifi_radar.ino`.
 2. Configure the chime URL through the `ChimeSensor` setup portal.
-3. Watch serial logs for `Input change: radar=1`.
-4. Confirm the chime event log shows `bench-radar motion: detected`.
-5. Add or adjust a Manage UI rule for `motion.detected`.
-6. Move the module to the intended mounting location and retest for false
+3. Short-press the service button and confirm a test event is sent.
+4. Watch serial logs for `Input change: radar=1`.
+5. Confirm the chime event log shows `bench-radar motion: detected`.
+6. Add or adjust a Manage UI rule for `motion.detected`.
+7. Move the module to the intended mounting location and retest for false
    triggers before designing the next board.
 
 ## Hardware Questions For The Next Board
@@ -48,8 +49,7 @@ sensor=bench-radar&type=motion&event=detected
   in the intended enclosure and near the intended door before committing.
 - Inhibit behavior: the `CDS` pin can be explored later if light-dependent
   suppression is useful, but it is not needed for the first motion prototype.
-- Reset access: keep a physical setup button reachable, or define a reliable
-  boot-time gesture.
+- Reset access: keep the physical service button reachable.
 - Serviceability: include labels for `3V3`, `GND`, `OUT`, and setup/reset on
   the prototype board.
 

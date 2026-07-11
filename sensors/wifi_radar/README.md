@@ -28,7 +28,7 @@ RCWL-0516 module:
 - Leave `VIN` disconnected for the first 3.3 V prototype
 - Leave `CDS` disconnected unless adding a light-dependent inhibit circuit
 
-Setup/reset button:
+Service button:
 
 - One side to `GPIO3`
 - Other side to `GND`
@@ -53,8 +53,9 @@ Recommended first values:
 - Sensor type: `motion`
 - Event: `detected`
 
-Hold the setup button while resetting or powering on the board for about 2
-seconds to clear saved Wi-Fi and sensor settings.
+Short-press the service button while running to send a test `motion.detected`
+event. Hold it while resetting or powering on the board for about 2 seconds to
+clear saved Wi-Fi and sensor settings.
 
 ## Test Notes
 
