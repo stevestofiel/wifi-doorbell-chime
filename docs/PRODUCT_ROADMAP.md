@@ -24,6 +24,7 @@ useful device.
 - [x] Local chime event log UI.
 - [x] Sensor-to-sound rule backend.
 - [x] Sensor-to-sound rule editor UI.
+- [x] Embedded sound budget/spec documented.
 - [ ] Peer chime configuration.
 - [ ] Peer log aggregation in the chime UI.
 - [ ] MQTT event publishing.
