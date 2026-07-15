@@ -38,6 +38,22 @@ Touch module:
 Do not power the touch module from `5V` unless its signal output is confirmed
 safe for ESP32 3.3 V GPIO.
 
+The current bench touch module is treated as active-low: its `S` output reads
+low when the module's touch indicator LED is on. It also behaves like a
+latched/toggle touch module, so the firmware emits a touch event on each stable
+state change. This makes both "LED turns on" and "LED turns off" touches send
+the configured sensor event.
+
+Optional event-gain trim potentiometer:
+
+- One outer pin to `3.3V`
+- Other outer pin to `GND`
+- Center/wiper pin to `GPIO2`
+
+The firmware reads the trim pot only when a service-button or touch event is
+sent. It maps the ADC reading to a conservative `gain` hint and includes it in
+the `/trigger` request.
+
 The touch input is intentionally less immediate than the physical button. It
 must stay active briefly before triggering, which helps avoid false rings from
 hovering, long jumper wires, or breadboard capacitance.
@@ -75,7 +91,7 @@ The sketch calls `/trigger` with a semantic event when the service button is
 pressed or the touch input is held:
 
 ```text
-/trigger?sensor=bench-button&type=doorbell&event=press&eventId=<sensor-generated-id>
+/trigger?sensor=bench-button&type=doorbell&event=press&eventId=<sensor-generated-id>&gain=<trim-value>
 ```
 
 The `eventId` is generated from the sensor MAC address, a local counter, and

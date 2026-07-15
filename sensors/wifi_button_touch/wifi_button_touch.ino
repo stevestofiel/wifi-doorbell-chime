@@ -5,6 +5,7 @@
 #include "ButtonTouchDriver.h"
 #include "../common/SensorButton.h"
 #include "../common/SensorConfig.h"
+#include "../common/SensorGainTrim.h"
 #include "../common/TriggerClient.h"
 
 // ---- Wiring ----------------------------------------------------------------
@@ -13,7 +14,11 @@ const int BUTTON_PIN = 3;
 
 // Touch module: G -> GND, V -> 3.3V, S -> GPIO4.
 const int TOUCH_PIN = 4;
-const int TOUCH_ACTIVE_LEVEL = HIGH;
+const int TOUCH_ACTIVE_LEVEL = LOW;
+const bool TOUCH_EMIT_ON_STABLE_CHANGE = true;
+
+// Optional event-gain trim pot: outer pins to 3.3V/GND, wiper to GPIO2.
+const int GAIN_TRIM_PIN = 2;
 
 // ---- Timing ----------------------------------------------------------------
 const unsigned long TRIGGER_COOLDOWN_MS = 2500;
@@ -22,7 +27,13 @@ const unsigned long TOUCH_HOLD_MS = 180;
 const unsigned long SETUP_HOLD_MS = 2000;
 
 SensorConfigManager configManager;
-TriggerClient triggerClient(configManager, TRIGGER_COOLDOWN_MS);
+SensorGainTrim gainTrim(GAIN_TRIM_PIN);
+
+float readEventGain() {
+  return gainTrim.readGain();
+}
+
+TriggerClient triggerClient(configManager, TRIGGER_COOLDOWN_MS, readEventGain);
 
 void emitSensorEvent(const char* source) {
   triggerClient.send(source);
@@ -38,7 +49,8 @@ ButtonTouchDriver driver(
   TOUCH_PIN,
   TOUCH_ACTIVE_LEVEL,
   TOUCH_HOLD_MS,
-  emitSensorEvent
+  emitSensorEvent,
+  TOUCH_EMIT_ON_STABLE_CHANGE
 );
 
 void setup() {
@@ -47,12 +59,15 @@ void setup() {
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);
   pinMode(TOUCH_PIN, INPUT);
+  gainTrim.begin();
 
   Serial.println();
   Serial.println("Wi-Fi sensor prototype starting");
   Serial.printf("Service button GPIO: %d\n", BUTTON_PIN);
   Serial.printf("Touch GPIO: %d\n", TOUCH_PIN);
+  Serial.printf("Gain trim ADC GPIO: %d\n", GAIN_TRIM_PIN);
   Serial.printf("Touch hold: %lu ms\n", TOUCH_HOLD_MS);
+  Serial.printf("Touch emits on stable change: %s\n", TOUCH_EMIT_ON_STABLE_CHANGE ? "yes" : "no");
   Serial.printf("Setup hold: %lu ms\n", SETUP_HOLD_MS);
   Serial.println("Raw input changes will print as serviceButton=<0|1> or touch=<0|1>");
 

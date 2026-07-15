@@ -129,6 +129,7 @@ Sensor event:
   sensor type
   event type
   optional sound key
+  optional event gain
   optional scope/group
   optional event id or counter
 
@@ -201,6 +202,18 @@ relay=0|1
 eventId=<dedupe_id>
 ```
 
+`gain` is an event-level volume hint, not a replacement for the chime's master
+volume. A remote sensor may provide it from firmware, setup configuration, or a
+physical control such as a small rotary potentiometer. The receiving chime
+should still apply its own master volume and local limits as the final authority
+before playback.
+
+Example:
+
+```text
+/trigger?sensor=driveway&type=motion&event=detected&gain=0.65
+```
+
 Existing endpoints should remain:
 
 - `/chime` for simple active-chime playback.
@@ -246,6 +259,51 @@ Example cases:
 - Front door plays a shorter sound in the shop.
 - Mailbox sensor plays only in the house.
 - Shop motion sensor is silent in bedrooms.
+
+## Event Gain And Sensor Volume Controls
+
+Remote sensors may eventually include a small set-and-forget gain control, such
+as a board-mounted trim potentiometer, to tune how loudly that sensor's events
+play relative to other events. This is especially useful when two sensors should
+use different sound prominence without changing the receiver's master volume.
+For compact remote sensors, this should be an installer/service adjustment
+rather than a prominent user-facing knob.
+
+Recommended behavior:
+
+- Treat sensor-provided `gain` as a multiplier or hint for one event.
+- Keep the chime's master volume as the final user safety control.
+- Clamp the resolved event volume to the chime's supported playback range.
+- Persist per-sensor rule volume on the chime separately from any physical
+  sensor dial, so installed sensors can still be managed from the receiver UI.
+- Consider per-sensor low/high calibration in the chime rule UI after the gain
+  path is stable. This should scale or clamp the sensor's event `gain` locally
+  on the chime, rather than requiring the chime to know raw ADC values from the
+  sensor.
+- Prefer the term `gain` for sensor-originated relative adjustment; reserve
+  `volume` for absolute chime playback controls if both names are ever exposed.
+
+Possible final volume model:
+
+```text
+final event volume = chime master volume * local rule gain * sensor event gain
+```
+
+Implementation notes:
+
+- A Wi-Fi sensor can read a compact trim potentiometer on an ADC-capable pin
+  and include the mapped value in `/trigger` as `gain=<value>`.
+- LoRa sensors can carry the same field in the compact packet format, likely as
+  a small integer that the gateway maps back into the shared `SensorEvent`.
+- Use conservative defaults, such as `1.0` when no gain is provided.
+- Consider a practical UI range such as 10-150% while keeping the wire protocol
+  tolerant of a wider clamped range.
+- If installers need finer control, expose optional per-sensor min/max or
+  inverted-direction calibration on the chime. Keep sensor-side defaults simple
+  enough that a trim pot works without calibration.
+- Physical gain controls are a product feature, not a required part of the
+  first remote sensor hardware milestone. Prefer low-profile internal trim
+  controls unless a specific kit genuinely needs an external dial.
 
 ## Sensor Configuration
 
@@ -525,6 +583,8 @@ LoRa UI:
 - Add sensor-id and sensor-type sound resolution.
 - Add compact built-in default sounds.
 - Add JSON endpoints for reading and updating sensor rules.
+- Preserve room for per-sensor rule gain, even if the first UI only maps
+  sensors to sounds.
 
 ### Phase 4: Multi-Chime Relay
 
@@ -545,6 +605,8 @@ LoRa UI:
 - Add a reference Wi-Fi sensor sketch or separate firmware package.
 - Support sensor ID, type, event, target URLs, and optional token.
 - Support fan-out to multiple chimes.
+- Optionally prototype ADC-based sensor event gain from a low-profile trim pot
+  after the required setup/test/service button behavior is stable.
 
 ### Phase 7: LoRa Gateway Chime
 
@@ -574,3 +636,7 @@ LoRa UI:
 - Whether peer discovery should remain manual or eventually use mDNS discovery.
 - Whether LoRa packet authentication is included in the first LoRa release or a
   follow-up security phase.
+- Exact gain ranges, clamping behavior, and UI language for sensor event gain
+  versus chime master volume.
+- Whether per-sensor gain calibration belongs in the first rule editor update
+  or a later installer/service UI pass.

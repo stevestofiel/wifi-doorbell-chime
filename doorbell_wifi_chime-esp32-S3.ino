@@ -62,6 +62,9 @@ unsigned long restartAtMs    = 0;
 bool        wifiWasConnected = false;
 unsigned long lastWiFiReconnectMs = 0;
 
+void playChime(float eventGain = 1.0f);
+bool playChimePath(const String &path, float eventGain = 1.0f);
+
 const unsigned long WIFI_RECONNECT_INTERVAL_MS = 10000;
 const unsigned long LED_PULSE_MS = 160;
 const size_t EVENT_LOG_SIZE = 20;
@@ -76,6 +79,7 @@ struct ChimeEvent {
   String input;
   String soundKey;
   String soundPath;
+  float eventGain = 1.0f;
   unsigned long timeMs = 0;
 };
 
@@ -216,12 +220,25 @@ void maintainWiFiConnection() {
   }
 }
 
-bool applyGainParam(AsyncWebServerRequest *request) {
+void setOutputGain(float gain) {
+  if (gain < 0.0f) gain = 0.0f;
+  if (gain > 3.0f) gain = 3.0f;
+  if (out) out->SetGain(gain);
+}
+
+bool readGainParam(AsyncWebServerRequest *request, float &gain) {
+  gain = 1.0f;
   if (!request->hasParam("gain")) return true;
-  float newGain = request->getParam("gain")->value().toFloat();
-  if (newGain < 0.0f || newGain > 3.0f) return false;
+  gain = request->getParam("gain")->value().toFloat();
+  return gain >= 0.0f && gain <= 3.0f;
+}
+
+bool applyGainParam(AsyncWebServerRequest *request) {
+  float newGain = currentGain;
+  if (!readGainParam(request, newGain)) return false;
+  if (!request->hasParam("gain")) return true;
   currentGain = newGain;
-  if (out) out->SetGain(currentGain);
+  setOutputGain(currentGain);
   return true;
 }
 
@@ -290,6 +307,7 @@ void appendEventJson(JsonObject obj, const ChimeEvent &event) {
   obj["input"] = event.input;
   obj["soundKey"] = event.soundKey;
   obj["soundPath"] = event.soundPath;
+  obj["eventGain"] = event.eventGain;
   obj["timeMs"] = event.timeMs;
   obj["ageMs"] = millis() - event.timeMs;
 }
@@ -301,7 +319,8 @@ void recordChimeEvent(const String &eventId,
                       const String &source,
                       const String &input,
                       const String &soundKey,
-                      const String &soundPath) {
+                      const String &soundPath,
+                      float eventGain = 1.0f) {
   ChimeEvent &entry = eventLog[eventLogNext];
   entry.seq = ++eventSeq;
   entry.eventId = normalizeEventId(eventId);
@@ -315,6 +334,7 @@ void recordChimeEvent(const String &eventId,
   entry.input = normalizeRuleField(input);
   entry.soundKey = soundKey;
   entry.soundPath = soundPath;
+  entry.eventGain = eventGain;
   entry.timeMs = millis();
 
   eventLogNext = (eventLogNext + 1) % EVENT_LOG_SIZE;
@@ -359,6 +379,7 @@ void handleStatus(AsyncWebServerRequest *request) {
     doc["lastEventType"] = last->type;
     doc["lastEvent"] = last->event;
     doc["lastEventSource"] = last->source;
+    doc["lastEventGain"] = last->eventGain;
     doc["lastEventAgeMs"] = millis() - last->timeMs;
   }
 
@@ -1027,6 +1048,7 @@ void stopPlayback() {
   if (id3) { delete id3; id3 = nullptr; }
   if (fileSource) { delete fileSource; fileSource = nullptr; }
   if (bootSource) { delete bootSource; bootSource = nullptr; }
+  setOutputGain(currentGain);
 }
 
 void playBootSound() {
@@ -1039,7 +1061,7 @@ void playBootSound() {
     return;
   }
   if (!mp3) mp3 = new AudioGeneratorMP3();
-  out->SetGain(currentGain);
+  setOutputGain(currentGain);
   mp3->begin(bootSource, out);
 
   // Keep setup responsive: cap boot-chime playback window.
@@ -1052,7 +1074,7 @@ void playBootSound() {
   stopPlayback();
 }
 
-void playChime() {
+void playChime(float eventGain) {
   Serial.println("playChime() called");
   if (activeFilePath.length() == 0 || !SPIFFS.exists(activeFilePath)) {
     Serial.println("  No file: " + activeFilePath);
@@ -1078,7 +1100,11 @@ void playChime() {
   }
   Serial.printf("  File size: %u bytes\n", fileSource->getSize());
   fileSource->seek(0, SEEK_SET);
-  out->SetGain(currentGain);
+  setOutputGain(currentGain * eventGain);
+  Serial.printf("  Gain: master=%.2f event=%.2f effective=%.2f\n",
+                currentGain,
+                eventGain,
+                currentGain * eventGain);
 
   String lower = activeFilePath;
   lower.toLowerCase();
@@ -1094,11 +1120,11 @@ void playChime() {
   }
 }
 
-bool playChimePath(const String &path) {
+bool playChimePath(const String &path, float eventGain) {
   if (path.length() == 0 || !SPIFFS.exists(path)) return false;
   String previous = activeFilePath;
   activeFilePath = path;
-  playChime();
+  playChime(eventGain);
   activeFilePath = previous;
   return true;
 }
@@ -1136,7 +1162,8 @@ void handleChime(AsyncWebServerRequest *request) {
 
 void handleSensorTrigger(AsyncWebServerRequest *request) {
   if (!requirePlaybackAuth(request)) return;
-  if (!applyGainParam(request)) {
+  float eventGain = 1.0f;
+  if (!readGainParam(request, eventGain)) {
     sendTriggerResponse(request, 400, "Invalid gain");
     return;
   }
@@ -1166,11 +1193,11 @@ void handleSensorTrigger(AsyncWebServerRequest *request) {
   }
 
   if (sound.path == activeFilePath) {
-    playChime();
+    playChime(eventGain);
   } else {
-    playChimePath(sound.path);
+    playChimePath(sound.path, eventGain);
   }
-  recordChimeEvent(eventId, sensorId, sensorType, eventType, "http", input, sound.key, sound.path);
+  recordChimeEvent(eventId, sensorId, sensorType, eventType, "http", input, sound.key, sound.path, eventGain);
   sendTriggerResponse(request, 200, "Sensor trigger OK");
 }
 
@@ -2633,8 +2660,10 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             age.textContent = eventAge(Number(item.ageMs || 0));
             const meta = document.createElement('div');
             meta.className = 'event-meta';
+            const eventGain = Number(item.eventGain ?? 1);
             const bits = [
               item.soundPath || '',
+              Number.isFinite(eventGain) ? `gain ${eventGain.toFixed(2)}x` : '',
               item.eventId ? `id ${item.eventId}` : '',
               item.input ? `input ${item.input}` : '',
               item.source ? `via ${item.source}` : ''

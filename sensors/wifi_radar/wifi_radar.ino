@@ -5,6 +5,7 @@
 #include "RcwlRadarDriver.h"
 #include "../common/SensorButton.h"
 #include "../common/SensorConfig.h"
+#include "../common/SensorGainTrim.h"
 #include "../common/TriggerClient.h"
 
 // ---- Wiring ----------------------------------------------------------------
@@ -15,6 +16,9 @@ const int RADAR_ACTIVE_LEVEL = HIGH;
 // Service button: one side to GPIO3, other side to GND.
 const int SETUP_BUTTON_PIN = 3;
 
+// Optional event-gain trim pot: outer pins to 3.3V/GND, wiper to GPIO2.
+const int GAIN_TRIM_PIN = 2;
+
 // ---- Timing ----------------------------------------------------------------
 const unsigned long TRIGGER_COOLDOWN_MS = 10000;
 const unsigned long BUTTON_DEBOUNCE_MS = 40;
@@ -22,7 +26,13 @@ const unsigned long RADAR_SETTLE_MS = 80;
 const unsigned long SETUP_HOLD_MS = 2000;
 
 SensorConfigManager configManager("bench-radar", "motion", "detected");
-TriggerClient triggerClient(configManager, TRIGGER_COOLDOWN_MS);
+SensorGainTrim gainTrim(GAIN_TRIM_PIN);
+
+float readEventGain() {
+  return gainTrim.readGain();
+}
+
+TriggerClient triggerClient(configManager, TRIGGER_COOLDOWN_MS, readEventGain);
 
 void emitSensorEvent(const char* source) {
   triggerClient.send(source);
@@ -47,11 +57,13 @@ void setup() {
 
   pinMode(RADAR_PIN, INPUT);
   pinMode(SETUP_BUTTON_PIN, INPUT_PULLUP);
+  gainTrim.begin();
 
   Serial.println();
   Serial.println("Wi-Fi radar sensor prototype starting");
   Serial.printf("Radar GPIO: %d\n", RADAR_PIN);
   Serial.printf("Setup button GPIO: %d\n", SETUP_BUTTON_PIN);
+  Serial.printf("Gain trim ADC GPIO: %d\n", GAIN_TRIM_PIN);
   Serial.printf("Trigger cooldown: %lu ms\n", TRIGGER_COOLDOWN_MS);
   Serial.printf("Setup hold: %lu ms\n", SETUP_HOLD_MS);
 

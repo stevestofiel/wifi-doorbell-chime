@@ -9,8 +9,13 @@
 
 class TriggerClient {
 public:
+  typedef float (*GainProvider)();
+
   TriggerClient(const SensorConfigManager& configManager, unsigned long cooldownMs)
     : configManager(configManager), cooldownMs(cooldownMs) {}
+
+  TriggerClient(const SensorConfigManager& configManager, unsigned long cooldownMs, GainProvider gainProvider)
+    : configManager(configManager), cooldownMs(cooldownMs), gainProvider(gainProvider) {}
 
   void send(const char* source) {
     unsigned long now = millis();
@@ -33,6 +38,16 @@ public:
       "&input=" + cleanSource(source) +
       "&eventId=" + eventId;
 
+    if (gainProvider) {
+      float gain = gainProvider();
+      if (gain >= 0.0f && gain <= 3.0f) {
+        Serial.printf("Trigger gain: %.2f\n", gain);
+        triggerUrl += "&gain=" + String(gain, 2);
+      } else {
+        Serial.printf("Trigger gain ignored: %.2f\n", gain);
+      }
+    }
+
     int status = httpGet(withToken(triggerUrl));
     if (status == 404) {
       Serial.println("Trigger endpoint missing; falling back to /chime");
@@ -45,6 +60,7 @@ private:
   unsigned long cooldownMs;
   unsigned long lastTriggerMs = 0;
   uint32_t eventCounter = 0;
+  GainProvider gainProvider = nullptr;
 
   static constexpr unsigned long WIFI_CONNECT_TIMEOUT_MS = 15000;
 

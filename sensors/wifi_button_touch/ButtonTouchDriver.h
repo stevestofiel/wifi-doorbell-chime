@@ -11,11 +11,13 @@ public:
   ButtonTouchDriver(int touchPin,
                     int touchActiveLevel,
                     unsigned long touchHoldMs,
-                    SensorEmitFn emit)
+                    SensorEmitFn emit,
+                    bool emitOnStableChange = false)
     : touchPin(touchPin),
       touchActiveLevel(touchActiveLevel),
       touchHoldMs(touchHoldMs),
-      emit(emit) {}
+      emit(emit),
+      emitOnStableChange(emitOnStableChange) {}
 
   void begin() {
     pinMode(touchPin, INPUT);
@@ -39,6 +41,10 @@ public:
     bool touchActive = lastTouchRaw == touchActiveLevel;
     if ((now - lastTouchChangeMs) >= touchHoldMs && touchActive != touchStableActive) {
       touchStableActive = touchActive;
+      if (emitOnStableChange) {
+        emit("touch");
+        return;
+      }
       if (!touchStableActive) touchTriggeredWhileActive = false;
     }
 
@@ -53,6 +59,7 @@ private:
   int touchActiveLevel;
   unsigned long touchHoldMs;
   SensorEmitFn emit;
+  bool emitOnStableChange;
 
   unsigned long lastTouchChangeMs = 0;
   bool lastTouchRaw = LOW;

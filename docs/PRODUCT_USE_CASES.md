@@ -187,6 +187,20 @@ Events from software integrations rather than physical sensors.
 These use cases make the chime useful even before the customer buys remote
 sensors.
 
+## Per-Sensor Sound Prominence
+
+Every event can have its own sound, and some events should also have their own
+relative loudness. A driveway motion sensor might be subtle, a mailbox alert
+might be soft, and a doorbell button might remain prominent, all while the
+chime's master volume stays under the user's control.
+
+Future remote sensors could include a low-profile trim potentiometer that sends
+event `gain` with the trigger. This should be a set-and-forget installer or
+service adjustment for compact sensors, not a bulky everyday control. The chime
+should treat it as a relative event hint and combine it with local rules and
+master volume, rather than letting a sensor override the receiver's final
+volume setting.
+
 ## Realistic Sensor Ideas
 
 High-priority physical sensors:

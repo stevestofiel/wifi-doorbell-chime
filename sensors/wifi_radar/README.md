@@ -33,6 +33,16 @@ Service button:
 - One side to `GPIO3`
 - Other side to `GND`
 
+Optional event-gain trim potentiometer:
+
+- One outer pin to `3.3V`
+- Other outer pin to `GND`
+- Center/wiper pin to `GPIO2`
+
+The firmware reads the trim pot only when a radar or service-button event is
+sent. It maps the ADC reading to a conservative `gain` hint and includes it in
+the `/trigger` request.
+
 The photographed module exposes `CDS VIN OUT GND 3V3`. The `OUT` pin is treated
 as an active-high 3.3 V logic signal. If a different radar module is used,
 confirm the output voltage before connecting it to an ESP32 GPIO.

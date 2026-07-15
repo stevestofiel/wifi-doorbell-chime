@@ -23,6 +23,7 @@ and `CDS` disconnected until the basic motion event path is working.
 - RCWL `GND` to ESP32 `GND`
 - RCWL `OUT` to ESP32 `GPIO4`
 - Service button between ESP32 `GPIO3` and `GND`
+- Optional 10K trim pot with outer pins to `3.3V`/`GND` and wiper to `GPIO2`
 - Power the ESP32 over USB for initial serial logging
 
 The firmware treats `OUT` as an active-high 3.3 V signal and sends:
@@ -58,6 +59,7 @@ USB-C edge
 | ESP32-S3 Super Mini           |
 |   GPIO3 -- service button - GND
 |   GPIO4 <---- RCWL OUT        |
+|   GPIO2 <---- trim pot wiper  |
 |   3V3  ----> RCWL 3V3         |
 |   GND  ----> RCWL GND         |
 |                               |
@@ -73,10 +75,11 @@ logs will make wiring and firmware problems much easier to separate.
 1. Upload `sensors/wifi_radar/wifi_radar.ino`.
 2. Configure the chime URL through the `ChimeSensor` setup portal.
 3. Short-press the service button and confirm a test event is sent.
-4. Watch serial logs for `Input change: radar=1`.
-5. Confirm the chime event log shows `bench-radar motion: detected`.
-6. Add or adjust a Manage UI rule for `motion.detected`.
-7. Move the module to the intended mounting location and retest for false
+4. Watch serial logs for `Trigger gain: <value>`.
+5. Watch serial logs for `Input change: radar=1`.
+6. Confirm the chime event log shows `bench-radar motion: detected`.
+7. Add or adjust a Manage UI rule for `motion.detected`.
+8. Move the module to the intended mounting location and retest for false
    triggers before designing the next board.
 
 ## Hardware Questions For The Next Board
