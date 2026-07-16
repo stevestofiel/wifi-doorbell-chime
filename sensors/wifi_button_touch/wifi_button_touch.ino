@@ -36,7 +36,11 @@ float readEventGain() {
 TriggerClient triggerClient(configManager, TRIGGER_COOLDOWN_MS, readEventGain);
 
 void emitSensorEvent(const char* source) {
-  triggerClient.send(source);
+  if (source && strcmp(source, "button") == 0) {
+    triggerClient.sendNow(source);
+  } else {
+    triggerClient.send(source);
+  }
 }
 
 SensorButton serviceButton(

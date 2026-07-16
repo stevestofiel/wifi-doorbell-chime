@@ -25,6 +25,7 @@ useful device.
 - [x] Sensor-to-sound rule backend.
 - [x] Sensor-to-sound rule editor UI.
 - [x] Embedded sound budget/spec documented.
+- [x] Wi-Fi radar service button, gain trim, and RCWL motion bench validated.
 - [ ] Peer chime configuration.
 - [ ] Peer log aggregation in the chime UI.
 - [ ] MQTT event publishing.
@@ -33,13 +34,15 @@ useful device.
 
 ## Next Session Plan
 
-Focus: physically validate the shared remote sensor setup/test/service button.
+Focus: finish remote sensor physical validation and tune radar deployment.
 
 1. Upload the button/touch firmware and verify boot-hold setup reset.
 2. Verify short-press sends a `doorbell.press` event.
-3. Upload the radar firmware and verify boot-hold setup reset.
-4. Verify radar service-button short-press sends a test `motion.detected` event.
-5. Verify RCWL radar motion sends `motion.detected` and tune cooldown if needed.
+3. Verify touch input behavior and false-trigger resistance at the intended
+   mounting location.
+4. Mount-test the RCWL radar and tune cooldown/settle timing if needed.
+5. Confirm battery, enclosure, reset-button, and service-button access before
+   calling either remote sensor hardware stable.
 
 ## Product Variants
 
