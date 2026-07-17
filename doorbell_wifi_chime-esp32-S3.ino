@@ -6,6 +6,7 @@
 #include <SPIFFS.h>
 #include <esp_partition.h>
 #include <WiFiManager.h>
+#include <WiFiUdp.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>
 #include <ESPmDNS.h>
@@ -32,6 +33,7 @@ AudioFileSourceID3 *id3 = nullptr;
 AudioFileSourcePROGMEM *bootSource = nullptr;
 AudioOutputI2S *out = nullptr;
 AsyncWebServer server(80);
+WiFiUDP peerUdp;
 
 const int BUTTON_PIN = 13;
 const int LED_PIN = 48; // onboard blue LED
@@ -70,6 +72,11 @@ bool playChimePath(const String &path, float eventGain = 1.0f);
 const unsigned long WIFI_RECONNECT_INTERVAL_MS = 10000;
 const unsigned long LED_PULSE_MS = 160;
 const size_t EVENT_LOG_SIZE = 20;
+const unsigned long PEER_DISCOVERY_INTERVAL_MS = 60000;
+const uint16_t PEER_DISCOVERY_PORT = 42142;
+const size_t DISCOVERED_PEER_MAX = 10;
+const char* PEER_DISCOVERY_PROBE = "DCHIME_DISCOVER";
+const char* PEER_DISCOVERY_REPLY = "DCHIME_HERE";
 
 struct ChimeEvent {
   uint32_t seq = 0;
@@ -91,10 +98,33 @@ struct SoundResolution {
   String source;
 };
 
+struct DiscoveredPeer {
+  String id;
+  String label;
+  String url;
+  String host;
+  bool active = false;
+  unsigned long seenMs = 0;
+};
+
+struct RawMdnsPeerResult {
+  String host;
+  String instance;
+  String address;
+  String url;
+  uint16_t port = 0;
+  bool self = false;
+  bool active = false;
+};
+
 ChimeEvent eventLog[EVENT_LOG_SIZE];
 size_t eventLogCount = 0;
 size_t eventLogNext = 0;
 uint32_t eventSeq = 0;
+DiscoveredPeer discoveredPeers[DISCOVERED_PEER_MAX];
+RawMdnsPeerResult rawMdnsPeerResults[DISCOVERED_PEER_MAX];
+int lastPeerQueryCount = -1;
+unsigned long lastPeerDiscoveryMs = 0;
 
 void onConfigSaved() {
   shouldReboot = true;
@@ -567,6 +597,189 @@ String peerIdFromInput(const String &idInput, const String &labelInput, const St
   return id;
 }
 
+String peerUrlFromMdnsResult(int index) {
+  String host = MDNS.hostname(index);
+  IPAddress ip = MDNS.address(index);
+  uint16_t port = MDNS.port(index);
+  String base;
+  if (host.length() > 0) {
+    base = "http://" + host;
+    if (!host.endsWith(".local")) base += ".local";
+  } else {
+    base = "http://" + ip.toString();
+  }
+  if (port > 0 && port != 80) base += ":" + String(port);
+  return base;
+}
+
+void clearDiscoveredPeers() {
+  for (size_t i = 0; i < DISCOVERED_PEER_MAX; ++i) {
+    discoveredPeers[i] = DiscoveredPeer();
+    rawMdnsPeerResults[i] = RawMdnsPeerResult();
+  }
+}
+
+void upsertDiscoveredPeer(const String &host, const String &url) {
+  String id = idFromPeerUrl(url);
+  if (id.length() == 0 || id == sanitizeLabel(mdnsName)) return;
+
+  int emptyIndex = -1;
+  for (size_t i = 0; i < DISCOVERED_PEER_MAX; ++i) {
+    if (discoveredPeers[i].active && discoveredPeers[i].id == id) {
+      discoveredPeers[i].host = host;
+      discoveredPeers[i].url = url;
+      discoveredPeers[i].seenMs = millis();
+      return;
+    }
+    if (!discoveredPeers[i].active && emptyIndex < 0) emptyIndex = (int)i;
+  }
+
+  if (emptyIndex < 0) return;
+  discoveredPeers[emptyIndex].active = true;
+  discoveredPeers[emptyIndex].id = id;
+  discoveredPeers[emptyIndex].label = id;
+  discoveredPeers[emptyIndex].host = host;
+  discoveredPeers[emptyIndex].url = url;
+  discoveredPeers[emptyIndex].seenMs = millis();
+}
+
+void upsertDiscoveredPeerById(const String &idInput, const String &labelInput, const String &url) {
+  String id = idFromPeerUrl("http://" + idInput + ".local");
+  if (id.length() == 0) id = sanitizeLabel(idInput);
+  if (id.length() == 0 || id == sanitizeLabel(mdnsName)) return;
+
+  int emptyIndex = -1;
+  for (size_t i = 0; i < DISCOVERED_PEER_MAX; ++i) {
+    if (discoveredPeers[i].active && discoveredPeers[i].id == id) {
+      discoveredPeers[i].label = labelInput.length() ? labelInput : id;
+      discoveredPeers[i].host = idInput;
+      if (url.length() > 0) discoveredPeers[i].url = url;
+      discoveredPeers[i].seenMs = millis();
+      return;
+    }
+    if (!discoveredPeers[i].active && emptyIndex < 0) emptyIndex = (int)i;
+  }
+
+  if (emptyIndex < 0) return;
+  discoveredPeers[emptyIndex].active = true;
+  discoveredPeers[emptyIndex].id = id;
+  discoveredPeers[emptyIndex].label = labelInput.length() ? labelInput : id;
+  discoveredPeers[emptyIndex].host = idInput;
+  discoveredPeers[emptyIndex].url = url;
+  discoveredPeers[emptyIndex].seenMs = millis();
+}
+
+void handlePeerDiscoveryPacket() {
+  int packetSize = peerUdp.parsePacket();
+  if (packetSize <= 0) return;
+
+  char buffer[160];
+  int len = peerUdp.read(buffer, sizeof(buffer) - 1);
+  if (len <= 0) return;
+  buffer[len] = '\0';
+  String msg = String(buffer);
+  msg.trim();
+
+  IPAddress remote = peerUdp.remoteIP();
+  uint16_t remotePort = peerUdp.remotePort();
+  if (msg.startsWith(PEER_DISCOVERY_PROBE)) {
+    String reply = String(PEER_DISCOVERY_REPLY) + "|" + mdnsName + "|" + deviceLabel + "|80";
+    peerUdp.beginPacket(remote, remotePort);
+    peerUdp.print(reply);
+    peerUdp.endPacket();
+    return;
+  }
+
+  if (!msg.startsWith(PEER_DISCOVERY_REPLY)) return;
+  int first = msg.indexOf('|');
+  int second = msg.indexOf('|', first + 1);
+  int third = msg.indexOf('|', second + 1);
+  if (first < 0 || second < 0 || third < 0) return;
+  String peerName = msg.substring(first + 1, second);
+  String peerLabel = msg.substring(second + 1, third);
+  uint16_t port = (uint16_t)msg.substring(third + 1).toInt();
+  if (port == 0) port = 80;
+  if (peerName == mdnsName) return;
+  String url = "http://" + remote.toString();
+  if (port != 80) url += ":" + String(port);
+  upsertDiscoveredPeerById(peerName, peerLabel, cleanPeerUrl(url));
+}
+
+void sendPeerDiscoveryProbe() {
+  if (WiFi.status() != WL_CONNECTED) return;
+  peerUdp.beginPacket(IPAddress(255, 255, 255, 255), PEER_DISCOVERY_PORT);
+  peerUdp.print(String(PEER_DISCOVERY_PROBE) + "|" + mdnsName);
+  peerUdp.endPacket();
+}
+
+void collectPeerDiscoveryReplies(unsigned long windowMs) {
+  unsigned long start = millis();
+  while (millis() - start < windowMs) {
+    handlePeerDiscoveryPacket();
+    delay(5);
+  }
+}
+
+void discoverPeerChimes(bool force = false) {
+  if (WiFi.status() != WL_CONNECTED) return;
+  unsigned long now = millis();
+  if (!force && lastPeerDiscoveryMs > 0 && (now - lastPeerDiscoveryMs) < PEER_DISCOVERY_INTERVAL_MS) return;
+
+  Serial.println("Peers: discovering _doorbell-chime._tcp");
+  clearDiscoveredPeers();
+  int count = mdnsOk ? MDNS.queryService("doorbell-chime", "tcp") : -1;
+  lastPeerQueryCount = count;
+  for (int i = 0; i < count; ++i) {
+    String host = MDNS.hostname(i);
+    String instance = MDNS.instanceName(i);
+    IPAddress address = MDNS.address(i);
+    String url = cleanPeerUrl(peerUrlFromMdnsResult(i));
+    bool isSelf = host == mdnsName || instance == mdnsName || url.indexOf("://" + mdnsName + ".local") >= 0;
+    if (i < (int)DISCOVERED_PEER_MAX) {
+      rawMdnsPeerResults[i].active = true;
+      rawMdnsPeerResults[i].host = host;
+      rawMdnsPeerResults[i].instance = instance;
+      rawMdnsPeerResults[i].address = address.toString();
+      rawMdnsPeerResults[i].port = MDNS.port(i);
+      rawMdnsPeerResults[i].url = url;
+      rawMdnsPeerResults[i].self = isSelf;
+    }
+    if (url.length() == 0) continue;
+    if (isSelf) continue;
+    upsertDiscoveredPeer(host, url);
+  }
+  sendPeerDiscoveryProbe();
+  collectPeerDiscoveryReplies(force ? 900 : 120);
+  lastPeerDiscoveryMs = now;
+  Serial.printf("Peers: discovered %d mDNS service(s)\n", count);
+}
+
+bool savedPeerMatches(JsonObject peer, const String &id, const String &url) {
+  String savedId = peer["id"] | "";
+  String savedUrl = cleanPeerUrl(peer["url"] | "");
+  return (id.length() > 0 && savedId == id) || (url.length() > 0 && savedUrl == url);
+}
+
+bool copySavedPeerOverride(DynamicJsonDocument &doc,
+                           const String &id,
+                           const String &url,
+                           String &label,
+                           bool &enabled,
+                           String &token,
+                           bool &saved) {
+  for (JsonObject peer : doc["peers"].as<JsonArray>()) {
+    if (!savedPeerMatches(peer, id, url)) continue;
+    String savedLabel = peer["label"] | "";
+    String savedToken = peer["token"] | "";
+    if (savedLabel.length() > 0) label = savedLabel;
+    enabled = peer["enabled"] | true;
+    token = savedToken;
+    saved = true;
+    return true;
+  }
+  return false;
+}
+
 bool requestBoolValue(AsyncWebServerRequest *request, const char* name, bool defaultValue) {
   String val = requestValue(request, name);
   if (val.length() == 0) return defaultValue;
@@ -597,22 +810,78 @@ String buildPeerTestEventId(const String &peerId) {
   return "peer-" + String((uint32_t)(chip & 0xFFFFFF), HEX) + "-" + peerId + "-" + String(millis(), HEX);
 }
 
-void appendPeerPublicJson(JsonArray out, JsonObject peer) {
+void appendPeerPublicJson(JsonArray out,
+                          const String &id,
+                          const String &label,
+                          const String &url,
+                          bool enabled,
+                          bool discovered,
+                          bool saved,
+                          const String &token) {
   JsonObject item = out.createNestedObject();
-  item["id"] = peer["id"] | "";
-  item["label"] = peer["label"] | "";
-  item["url"] = peer["url"] | "";
-  item["enabled"] = peer["enabled"] | true;
-  String token = peer["token"] | "";
+  item["id"] = id;
+  item["label"] = label;
+  item["url"] = url;
+  item["enabled"] = enabled;
+  item["discovered"] = discovered;
+  item["saved"] = saved;
   item["hasToken"] = token.length() > 0;
 }
 
 void sendPeersResponse(AsyncWebServerRequest *request, DynamicJsonDocument &doc) {
   DynamicJsonDocument response(6144);
   response["ok"] = true;
+  response["discoveryAgeMs"] = lastPeerDiscoveryMs > 0 ? millis() - lastPeerDiscoveryMs : -1;
+  response["mdnsOk"] = mdnsOk;
+  response["queryCount"] = lastPeerQueryCount;
+  size_t discoveredCount = 0;
+  for (size_t i = 0; i < DISCOVERED_PEER_MAX; ++i) {
+    if (discoveredPeers[i].active) discoveredCount++;
+  }
+  response["discoveredCount"] = discoveredCount;
+  JsonArray raw = response.createNestedArray("rawResults");
+  for (size_t i = 0; i < DISCOVERED_PEER_MAX; ++i) {
+    if (!rawMdnsPeerResults[i].active) continue;
+    JsonObject item = raw.createNestedObject();
+    item["host"] = rawMdnsPeerResults[i].host;
+    item["instance"] = rawMdnsPeerResults[i].instance;
+    item["address"] = rawMdnsPeerResults[i].address;
+    item["port"] = rawMdnsPeerResults[i].port;
+    item["url"] = rawMdnsPeerResults[i].url;
+    item["self"] = rawMdnsPeerResults[i].self;
+  }
   JsonArray peers = response.createNestedArray("peers");
+
+  for (size_t i = 0; i < DISCOVERED_PEER_MAX; ++i) {
+    if (!discoveredPeers[i].active) continue;
+    String id = discoveredPeers[i].id;
+    String url = discoveredPeers[i].url;
+    String label = discoveredPeers[i].label.length() ? discoveredPeers[i].label : id;
+    String token = "";
+    bool enabled = true;
+    bool saved = false;
+    copySavedPeerOverride(doc, id, url, label, enabled, token, saved);
+    appendPeerPublicJson(peers, id, label, url, enabled, true, saved, token);
+  }
+
   for (JsonObject peer : doc["peers"].as<JsonArray>()) {
-    appendPeerPublicJson(peers, peer);
+    String id = peer["id"] | "";
+    String url = cleanPeerUrl(peer["url"] | "");
+    bool alreadyDiscovered = false;
+    for (size_t i = 0; i < DISCOVERED_PEER_MAX; ++i) {
+      if (!discoveredPeers[i].active) continue;
+      if (savedPeerMatches(peer, discoveredPeers[i].id, discoveredPeers[i].url)) {
+        alreadyDiscovered = true;
+        break;
+      }
+    }
+    if (alreadyDiscovered) continue;
+
+    String label = peer["label"] | "";
+    if (label.length() == 0) label = id;
+    bool enabled = peer["enabled"] | true;
+    String token = peer["token"] | "";
+    appendPeerPublicJson(peers, id, label, url, enabled, false, true, token);
   }
   String payload;
   serializeJson(response, payload);
@@ -620,6 +889,7 @@ void sendPeersResponse(AsyncWebServerRequest *request, DynamicJsonDocument &doc)
 }
 
 void handlePeersGet(AsyncWebServerRequest *request) {
+  discoverPeerChimes(request->hasParam("refresh"));
   DynamicJsonDocument doc(6144);
   loadPeersDocument(doc);
   sendPeersResponse(request, doc);
@@ -689,18 +959,32 @@ void handlePeersPost(AsyncWebServerRequest *request) {
 void handlePeerTest(AsyncWebServerRequest *request) {
   if (!requireAdminAuth(request)) return;
   String id = sanitizeLabel(requestValue(request, "id"));
+  String requestedUrl = cleanPeerUrl(requestValue(request, "url"));
   if (id.length() == 0) {
     request->send(400, "application/json", "{\"ok\":false,\"error\":\"Missing peer id\"}");
     return;
   }
 
+  discoverPeerChimes(false);
   DynamicJsonDocument doc(6144);
   loadPeersDocument(doc);
   String url = "";
-  String label = "";
+  String label = id;
   String peerToken = "";
   bool enabled = true;
+
+  for (size_t i = 0; i < DISCOVERED_PEER_MAX; ++i) {
+    if (!discoveredPeers[i].active || discoveredPeers[i].id != id) continue;
+    url = discoveredPeers[i].url;
+    label = discoveredPeers[i].label.length() ? discoveredPeers[i].label : id;
+    break;
+  }
+
+  bool saved = false;
+  copySavedPeerOverride(doc, id, url, label, enabled, peerToken, saved);
+
   for (JsonObject peer : doc["peers"].as<JsonArray>()) {
+    if (url.length() > 0) break;
     if (String(peer["id"] | "") == id) {
       url = peer["url"] | "";
       label = peer["label"] | "";
@@ -709,6 +993,10 @@ void handlePeerTest(AsyncWebServerRequest *request) {
       break;
     }
   }
+  if (url.length() == 0 && requestedUrl.length() > 0) {
+    url = requestedUrl;
+  }
+  if (label.length() == 0) label = id;
 
   if (url.length() == 0) {
     request->send(404, "application/json", "{\"ok\":false,\"error\":\"Peer not found\"}");
@@ -2197,6 +2485,17 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     }
     .peer-actions {display:grid; grid-template-columns:1fr auto; gap:0.45rem; align-items:center;}
     .peer-actions button {width:auto; min-width:auto; margin:0; padding:0.55rem 0.8rem; font-size:0.85rem; line-height:1.1; border-radius:8px;}
+    .peer-enabled-row {
+      align-self:end;
+      justify-self:start;
+      display:inline-flex;
+      gap:0.45rem;
+      align-items:center;
+      min-height:38px;
+      color:#d8e2ee;
+      font-size:0.86rem;
+    }
+    .peer-enabled-row input {width:auto;}
     .peer-list {display:grid; gap:0.45rem;}
     .peer-empty {color:var(--text-light); font-size:0.9rem;}
     .peer-item {
@@ -2455,7 +2754,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     <div class="tabbar" role="tablist" aria-label="Manage sections">
       <button class="active" type="button" data-tab="chimes" title="Select, preview, or delete uploaded chime sounds">Chimes</button>
       <button type="button" data-tab="rules" title="Map sensor events to specific sounds">Rules</button>
-      <button type="button" data-tab="peers" title="Configure peer chimes and test chime-to-chime triggering">Peers</button>
+      <button type="button" data-tab="peers" title="View discovered peer chimes and save peer overrides">Peers</button>
       <button type="button" data-tab="events" title="View recent sensor and chime events">Events</button>
       <button type="button" data-tab="upload" title="Upload a new WAV or MP3 chime sound">Upload</button>
       <button type="button" data-tab="device" title="Adjust volume, device name, Wi-Fi, and advanced network options">Device</button>
@@ -2527,19 +2826,19 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             <div class="peer-row">
               <div class="peer-field">
                 <label for="peerLabelInput">Label</label>
-                <input id="peerLabelInput" type="text" maxlength="40" placeholder="patio" title="Friendly peer chime label">
+                <input id="peerLabelInput" type="text" maxlength="40" placeholder="patio" autocomplete="off" title="Friendly peer chime label">
               </div>
               <div class="peer-field">
                 <label for="peerUrlInput">URL</label>
-                <input id="peerUrlInput" type="text" maxlength="96" placeholder="http://doorbell-patio.local" title="Peer chime base URL">
+                <input id="peerUrlInput" type="text" maxlength="96" placeholder="http://doorbell-patio.local" autocomplete="off" title="Peer chime base URL">
               </div>
             </div>
             <div class="peer-row">
               <div class="peer-field">
                 <label for="peerTokenInput">Peer Token</label>
-                <input id="peerTokenInput" type="password" maxlength="64" placeholder="optional" title="Peer chime playback/admin token, if required">
+                <input id="peerTokenInput" type="password" maxlength="64" placeholder="optional" autocomplete="new-password" title="Peer chime playback/admin token, if required">
               </div>
-              <label class="check-row">
+              <label class="peer-enabled-row">
                 <input id="peerEnabledInput" type="checkbox" checked title="Enable this peer for tests and future forwarding">
                 Enabled
               </label>
@@ -2550,7 +2849,10 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
               <button id="savePeerBtn" type="button" title="Save or replace this peer chime">Save Peer</button>
             </div>
           </div>
-          <div class="network-help">Peer tests send a `peer.test` event to the selected chime.</div>
+          <div class="event-actions">
+            <button id="refreshPeersBtn" type="button" title="Refresh mDNS discovery for peer chimes">Refresh Discovery</button>
+          </div>
+          <div class="network-help">Discovered chimes come from `_doorbell-chime._tcp` mDNS plus local UDP fallback. Saved settings are overrides.</div>
           <div id="peerList" class="peer-list">
             <div class="peer-empty">Loading...</div>
           </div>
@@ -2670,6 +2972,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     const peerEnabledInput = document.getElementById('peerEnabledInput');
     const peerIdInput = document.getElementById('peerIdInput');
     const savePeerBtn = document.getElementById('savePeerBtn');
+    const refreshPeersBtn = document.getElementById('refreshPeersBtn');
     const peerSaveState = document.getElementById('peerSaveState');
     const peerList = document.getElementById('peerList');
     const deviceStatus = document.getElementById('deviceStatus');
@@ -3085,7 +3388,15 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     const renderPeers = (data) => {
       const peers = data.peers || [];
       if (!peers.length) {
-        peerList.innerHTML = '<div class="peer-empty">No peer chimes yet.</div>';
+        const mdns = data.mdnsOk ? 'mDNS running' : 'mDNS not running';
+        const count = Number(data.discoveredCount || 0);
+        const queryCount = Number(data.queryCount ?? -1);
+        const raw = (data.rawResults || []).map(item => {
+          const name = item.instance || item.host || item.address || 'unknown';
+          return `${name}${item.self ? ' (self)' : ''}`;
+        }).join(', ');
+        const rawText = raw ? ` Raw: ${raw}.` : '';
+        peerList.innerHTML = `<div class="peer-empty">No discovered or saved peer chimes yet. ${mdns}; query ${queryCount}; ${count} usable.${rawText}</div>`;
         return;
       }
 
@@ -3119,6 +3430,8 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         meta.className = 'peer-meta';
         const bits = [
           peer.url || '',
+          peer.discovered ? 'discovered' : '',
+          peer.saved ? 'saved settings' : '',
           peer.hasToken ? 'token saved' : '',
           peer.enabled === false ? 'disabled' : 'enabled'
         ].filter(Boolean);
@@ -3132,11 +3445,17 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       });
     }
 
-    const refreshPeers = () => {
-      return fetch('/peers')
+    const refreshPeers = (force = false) => {
+      const url = force ? '/peers?refresh=1' : '/peers';
+      if (force) setPeerSaveState('Refreshing discovery...');
+      return fetch(url)
         .then(r => r.json())
-        .then(data => renderPeers(data))
+        .then(data => {
+          if (force) setPeerSaveState('Discovery refreshed', 'ok');
+          renderPeers(data);
+        })
         .catch(() => {
+          if (force) setPeerSaveState('Discovery refresh failed', 'error');
           peerList.innerHTML = '<div class="peer-empty">Unable to load peers.</div>';
         });
     }
@@ -3205,7 +3524,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     }
 
     const testPeer = (peer) => {
-      const body = tokenBody({id: peer.id || ''});
+      const body = tokenBody({id: peer.id || '', url: peer.url || ''});
       setPeerSaveState(`Testing ${peer.label || peer.id}...`);
       fetchAuth('/peers/test', {
         method: 'POST',
@@ -3214,7 +3533,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       })
       .then(r => r.json().then(data => ({ok: r.ok, data})))
       .then(({ok, data}) => {
-        if (!ok || !data.ok) throw new Error(`Test failed (${data.status || 'network'})`);
+        if (!ok || !data.ok) throw new Error(`Test failed (${data.status ?? 'network'})`);
         setPeerSaveState(`Test sent to ${peer.label || peer.id}`, 'ok');
         setTimeout(refreshEvents, 250);
       })
@@ -3483,6 +3802,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     refreshEventsBtn.addEventListener('click', refreshEvents);
     saveRuleBtn.addEventListener('click', saveRule);
     savePeerBtn.addEventListener('click', savePeer);
+    refreshPeersBtn.addEventListener('click', () => refreshPeers(true));
     ruleTypeSelect.addEventListener('change', populateRuleEventSelect);
     [ruleSensorInput, ruleTypeSelect, ruleEventSelect].forEach(input => {
       input.addEventListener('keydown', e => {
@@ -3771,6 +4091,8 @@ void setup() {
 
   server.begin();
   Serial.println("Server ready");
+  peerUdp.begin(PEER_DISCOVERY_PORT);
+  Serial.printf("Peer discovery UDP: port %u\n", PEER_DISCOVERY_PORT);
 
   // wait for Wi-Fi + IP before starting mDNS
   unsigned long startMs = millis();
@@ -3790,6 +4112,7 @@ void loop() {
   }
 
   maintainWiFiConnection();
+  handlePeerDiscoveryPacket();
 
 #if defined(ESP8266)
   MDNS.update(); // keep mDNS responder alive on ESP8266
@@ -3821,6 +4144,8 @@ void loop() {
       Serial.printf("mDNS: retry begin %s\n", mdnsName.c_str());
       startMdnsNow(mdnsName);
     }
+  } else if (mdnsOk && WiFi.status() == WL_CONNECTED) {
+    discoverPeerChimes(false);
   }
   delay(1);
 }
