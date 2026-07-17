@@ -68,6 +68,7 @@ unsigned long lastWiFiReconnectMs = 0;
 
 void playChime(float eventGain = 1.0f);
 bool playChimePath(const String &path, float eventGain = 1.0f);
+bool playbackRunning();
 
 const unsigned long WIFI_RECONNECT_INTERVAL_MS = 10000;
 const unsigned long LED_PULSE_MS = 160;
@@ -125,6 +126,20 @@ DiscoveredPeer discoveredPeers[DISCOVERED_PEER_MAX];
 RawMdnsPeerResult rawMdnsPeerResults[DISCOVERED_PEER_MAX];
 int lastPeerQueryCount = -1;
 unsigned long lastPeerDiscoveryMs = 0;
+
+struct PendingPeerForward {
+  bool active = false;
+  String sensorId;
+  String sensorType;
+  String eventType;
+  String input;
+  String eventId;
+  float eventGain = 1.0f;
+  unsigned long dueMs = 0;
+  unsigned long createdMs = 0;
+};
+
+PendingPeerForward pendingPeerForward;
 
 void onConfigSaved() {
   shouldReboot = true;
@@ -543,6 +558,10 @@ bool savePeersDocument(DynamicJsonDocument &doc) {
   return true;
 }
 
+bool peerForwardingEnabled(DynamicJsonDocument &doc) {
+  return doc["forwardAll"] | false;
+}
+
 String cleanPeerUrl(const String &input) {
   String out = input;
   out.trim();
@@ -810,6 +829,63 @@ String buildPeerTestEventId(const String &peerId) {
   return "peer-" + String((uint32_t)(chip & 0xFFFFFF), HEX) + "-" + peerId + "-" + String(millis(), HEX);
 }
 
+int httpGetWithWiFiClient(const String &target, unsigned long timeoutMs, String &bodyOut) {
+  bodyOut = "";
+  String url = target;
+  if (!url.startsWith("http://")) return -2;
+  url = url.substring(7);
+
+  int pathIdx = url.indexOf('/');
+  String hostPort = pathIdx >= 0 ? url.substring(0, pathIdx) : url;
+  String path = pathIdx >= 0 ? url.substring(pathIdx) : "/";
+  int port = 80;
+  int colonIdx = hostPort.indexOf(':');
+  String host = hostPort;
+  if (colonIdx >= 0) {
+    host = hostPort.substring(0, colonIdx);
+    port = hostPort.substring(colonIdx + 1).toInt();
+    if (port <= 0) port = 80;
+  }
+
+  WiFiClient client;
+  client.setTimeout((timeoutMs + 999) / 1000);
+  unsigned long start = millis();
+  IPAddress ip;
+  bool isIpAddress = ip.fromString(host);
+  bool connected = isIpAddress ? client.connect(ip, port) : client.connect(host.c_str(), port);
+  if (!connected) return -1;
+
+  client.print(String("GET ") + path + " HTTP/1.1\r\n" +
+               "Host: " + hostPort + "\r\n" +
+               "Connection: close\r\n\r\n");
+
+  while (!client.available() && client.connected() && (millis() - start) < timeoutMs) {
+    delay(5);
+  }
+  if (!client.available()) {
+    client.stop();
+    return -3;
+  }
+
+  String statusLine = client.readStringUntil('\n');
+  statusLine.trim();
+  int firstSpace = statusLine.indexOf(' ');
+  int secondSpace = statusLine.indexOf(' ', firstSpace + 1);
+  int status = firstSpace >= 0 ? statusLine.substring(firstSpace + 1, secondSpace > firstSpace ? secondSpace : statusLine.length()).toInt() : -4;
+
+  while (client.connected() || client.available()) {
+    if (client.available()) {
+      char c = (char)client.read();
+      if (bodyOut.length() < 160) bodyOut += c;
+    } else {
+      delay(1);
+    }
+    if ((millis() - start) >= timeoutMs) break;
+  }
+  client.stop();
+  return status > 0 ? status : -4;
+}
+
 void appendPeerPublicJson(JsonArray out,
                           const String &id,
                           const String &label,
@@ -831,6 +907,7 @@ void appendPeerPublicJson(JsonArray out,
 void sendPeersResponse(AsyncWebServerRequest *request, DynamicJsonDocument &doc) {
   DynamicJsonDocument response(6144);
   response["ok"] = true;
+  response["forwardAll"] = peerForwardingEnabled(doc);
   response["discoveryAgeMs"] = lastPeerDiscoveryMs > 0 ? millis() - lastPeerDiscoveryMs : -1;
   response["mdnsOk"] = mdnsOk;
   response["queryCount"] = lastPeerQueryCount;
@@ -1015,13 +1092,8 @@ void handlePeerTest(AsyncWebServerRequest *request) {
     target += "&token=" + urlEncode(peerToken);
   }
 
-  HTTPClient http;
-  http.setConnectTimeout(4000);
-  http.setTimeout(6000);
-  bool beginOk = http.begin(target);
-  int status = beginOk ? http.GET() : -1;
-  String body = status > 0 ? http.getString() : "";
-  http.end();
+  String body;
+  int status = httpGetWithWiFiClient(target, 6000, body);
 
   bool ok = status >= 200 && status < 300;
   recordChimeEvent(eventId, mdnsName, "peer", "test", "peer-test", "outbound", "", url, 1.0f);
@@ -1037,6 +1109,153 @@ void handlePeerTest(AsyncWebServerRequest *request) {
   String payload;
   serializeJson(response, payload);
   request->send(ok ? 200 : 502, "application/json", payload);
+}
+
+int sendPeerTrigger(const String &url,
+                    const String &peerToken,
+                    const String &sensorId,
+                    const String &sensorType,
+                    const String &eventType,
+                    const String &input,
+                    const String &eventId,
+                    float eventGain,
+                    String &bodyOut) {
+  String target = url + "/trigger?sensor=" + urlEncode(sensorId) +
+                  "&type=" + urlEncode(sensorType) +
+                  "&event=" + urlEncode(eventType) +
+                  "&input=" + urlEncode(input) +
+                  "&eventId=" + urlEncode(eventId) +
+                  "&gain=" + String(eventGain, 2) +
+                  "&relay=0";
+  if (peerToken.length() > 0) {
+    target += "&token=" + urlEncode(peerToken);
+  }
+
+  return httpGetWithWiFiClient(target, 4000, bodyOut);
+}
+
+void forwardSensorTriggerToPeers(const String &sensorId,
+                                 const String &sensorType,
+                                 const String &eventType,
+                                 const String &input,
+                                 const String &eventId,
+                                 float eventGain) {
+  DynamicJsonDocument doc(6144);
+  loadPeersDocument(doc);
+  if (!peerForwardingEnabled(doc)) return;
+
+  discoverPeerChimes(false);
+  size_t attempted = 0;
+  size_t sent = 0;
+  int lastStatus = 0;
+
+  for (size_t i = 0; i < DISCOVERED_PEER_MAX; ++i) {
+    if (!discoveredPeers[i].active) continue;
+    String id = discoveredPeers[i].id;
+    String url = discoveredPeers[i].url;
+    String label = discoveredPeers[i].label.length() ? discoveredPeers[i].label : id;
+    String peerToken = "";
+    bool enabled = true;
+    bool saved = false;
+    copySavedPeerOverride(doc, id, url, label, enabled, peerToken, saved);
+    if (!enabled || url.length() == 0) continue;
+
+    String body;
+    int status = sendPeerTrigger(url, peerToken, sensorId, sensorType, eventType, input, eventId, eventGain, body);
+    lastStatus = status;
+    attempted++;
+    if (status >= 200 && status < 300) sent++;
+    Serial.printf("Peer forward: %s -> %d\n", label.c_str(), status);
+  }
+
+  for (JsonObject peer : doc["peers"].as<JsonArray>()) {
+    String id = peer["id"] | "";
+    String url = cleanPeerUrl(peer["url"] | "");
+    bool alreadyDiscovered = false;
+    for (size_t i = 0; i < DISCOVERED_PEER_MAX; ++i) {
+      if (!discoveredPeers[i].active) continue;
+      if (savedPeerMatches(peer, discoveredPeers[i].id, discoveredPeers[i].url)) {
+        alreadyDiscovered = true;
+        break;
+      }
+    }
+    if (alreadyDiscovered) continue;
+    if (!(peer["enabled"] | true) || url.length() == 0) continue;
+
+    String peerToken = peer["token"] | "";
+    String label = peer["label"] | "";
+    if (label.length() == 0) label = id;
+    String body;
+    int status = sendPeerTrigger(url, peerToken, sensorId, sensorType, eventType, input, eventId, eventGain, body);
+    lastStatus = status;
+    attempted++;
+    if (status >= 200 && status < 300) sent++;
+    Serial.printf("Peer forward: %s -> %d\n", label.c_str(), status);
+  }
+
+  if (attempted > 0) {
+    Serial.printf("Peer forward: sent %u/%u\n", (unsigned)sent, (unsigned)attempted);
+    String status = sent == attempted ? "sent" : (sent > 0 ? "partial" : "failed");
+    recordChimeEvent(eventId + "-forward",
+                     sensorId,
+                     "peer-forward",
+                     status,
+                     "peer-forward",
+                     String(sent) + "/" + String(attempted) + ":" + String(lastStatus),
+                     "",
+                     "enabled-peers",
+                     eventGain);
+  }
+}
+
+void schedulePeerForward(const String &sensorId,
+                         const String &sensorType,
+                         const String &eventType,
+                         const String &input,
+                         const String &eventId,
+                         float eventGain) {
+  pendingPeerForward.active = true;
+  pendingPeerForward.sensorId = sensorId;
+  pendingPeerForward.sensorType = sensorType;
+  pendingPeerForward.eventType = eventType;
+  pendingPeerForward.input = input;
+  pendingPeerForward.eventId = eventId;
+  pendingPeerForward.eventGain = eventGain;
+  pendingPeerForward.createdMs = millis();
+  pendingPeerForward.dueMs = pendingPeerForward.createdMs + 250;
+}
+
+void processPendingPeerForward() {
+  if (!pendingPeerForward.active) return;
+  if ((long)(millis() - pendingPeerForward.dueMs) < 0) return;
+  if (playbackRunning() && (millis() - pendingPeerForward.createdMs) < 8000) return;
+
+  PendingPeerForward work = pendingPeerForward;
+  pendingPeerForward.active = false;
+  forwardSensorTriggerToPeers(work.sensorId,
+                              work.sensorType,
+                              work.eventType,
+                              work.input,
+                              work.eventId,
+                              work.eventGain);
+}
+
+void handlePeerForwardingPost(AsyncWebServerRequest *request) {
+  if (!requireAdminAuth(request)) return;
+
+  DynamicJsonDocument doc(6144);
+  loadPeersDocument(doc);
+  doc["forwardAll"] = requestBoolValue(request, "enabled", false);
+  if (!savePeersDocument(doc)) {
+    request->send(500, "application/json", "{\"ok\":false,\"error\":\"Save failed\"}");
+    return;
+  }
+
+  discoverPeerChimes(false);
+  DynamicJsonDocument response(6144);
+  loadPeersDocument(response);
+  response["ok"] = true;
+  sendPeersResponse(request, response);
 }
 
 void addDefaultRuleJson(JsonArray defaults, const char* sensor, const char* type, const char* eventName, const char* key) {
@@ -1601,6 +1820,10 @@ void stopPlayback() {
   setOutputGain(currentGain);
 }
 
+bool playbackRunning() {
+  return (wav && wav->isRunning()) || (mp3 && mp3->isRunning());
+}
+
 void playBootSound() {
   if (Startup_Signal_mp3_len == 0 || !out) return;
   stopPlayback();
@@ -1723,11 +1946,16 @@ void handleSensorTrigger(AsyncWebServerRequest *request) {
   String eventType = request->hasParam("event") ? request->getParam("event")->value() : "";
   String eventId = request->hasParam("eventId") ? request->getParam("eventId")->value() : "";
   String input = request->hasParam("input") ? request->getParam("input")->value() : "";
+  String relay = request->hasParam("relay") ? request->getParam("relay")->value() : "";
   String soundKey = request->hasParam("sound") ? request->getParam("sound")->value() : "";
   if (soundKey.length() == 0 && request->hasParam("key")) {
     soundKey = request->getParam("key")->value();
   }
   soundKey.toLowerCase();
+  if (eventId.length() == 0) {
+    uint64_t chip = ESP.getEfuseMac();
+    eventId = "sensor-" + String((uint32_t)(chip & 0xFFFFFF), HEX) + "-" + String(millis(), HEX);
+  }
 
   if (hasSeenEventId(eventId)) {
     sendTriggerResponse(request, 200, "Duplicate trigger ignored");
@@ -1747,7 +1975,11 @@ void handleSensorTrigger(AsyncWebServerRequest *request) {
   } else {
     playChimePath(sound.path, eventGain);
   }
-  recordChimeEvent(eventId, sensorId, sensorType, eventType, "http", input, sound.key, sound.path, eventGain);
+  String source = relay == "0" ? "peer" : "http";
+  recordChimeEvent(eventId, sensorId, sensorType, eventType, source, input, sound.key, sound.path, eventGain);
+  if (relay != "0" && sensorType != "peer") {
+    schedulePeerForward(sensorId, sensorType, eventType, input, eventId, eventGain);
+  }
   sendTriggerResponse(request, 200, "Sensor trigger OK");
 }
 
@@ -2496,6 +2728,15 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       font-size:0.86rem;
     }
     .peer-enabled-row input {width:auto;}
+    .peer-forward-row {
+      display:inline-flex;
+      gap:0.5rem;
+      align-items:center;
+      color:#d8e2ee;
+      font-size:0.9rem;
+      font-weight:600;
+    }
+    .peer-forward-row input {width:auto;}
     .peer-list {display:grid; gap:0.45rem;}
     .peer-empty {color:var(--text-light); font-size:0.9rem;}
     .peer-item {
@@ -2850,6 +3091,10 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             </div>
           </div>
           <div class="event-actions">
+            <label class="peer-forward-row">
+              <input id="peerForwardAllInput" type="checkbox" title="Forward incoming sensor triggers to enabled peer chimes">
+              Forward sensor triggers to peers
+            </label>
             <button id="refreshPeersBtn" type="button" title="Refresh mDNS discovery for peer chimes">Refresh Discovery</button>
           </div>
           <div class="network-help">Discovered chimes come from `_doorbell-chime._tcp` mDNS plus local UDP fallback. Saved settings are overrides.</div>
@@ -2973,6 +3218,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     const peerIdInput = document.getElementById('peerIdInput');
     const savePeerBtn = document.getElementById('savePeerBtn');
     const refreshPeersBtn = document.getElementById('refreshPeersBtn');
+    const peerForwardAllInput = document.getElementById('peerForwardAllInput');
     const peerSaveState = document.getElementById('peerSaveState');
     const peerList = document.getElementById('peerList');
     const deviceStatus = document.getElementById('deviceStatus');
@@ -3386,6 +3632,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     }
 
     const renderPeers = (data) => {
+      peerForwardAllInput.checked = data.forwardAll === true;
       const peers = data.peers || [];
       if (!peers.length) {
         const mdns = data.mdnsOk ? 'mDNS running' : 'mDNS not running';
@@ -3538,6 +3785,28 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         setTimeout(refreshEvents, 250);
       })
       .catch(err => setPeerSaveState(err.message || 'Test failed', 'error'));
+    }
+
+    const savePeerForwarding = () => {
+      const body = tokenBody({enabled: peerForwardAllInput.checked ? '1' : '0'});
+      setPeerSaveState('Saving forwarding setting...');
+      fetchAuth('/peers/forwarding', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body
+      })
+      .then(r => {
+        if (!r.ok) throw new Error(`Save failed (${r.status})`);
+        return r.json();
+      })
+      .then(data => {
+        setPeerSaveState(peerForwardAllInput.checked ? 'Forwarding enabled' : 'Forwarding disabled', 'ok');
+        renderPeers(data);
+      })
+      .catch(err => {
+        peerForwardAllInput.checked = !peerForwardAllInput.checked;
+        setPeerSaveState(err.message || 'Save failed', 'error');
+      });
     }
 
     const editRule = (rule) => {
@@ -3803,6 +4072,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     saveRuleBtn.addEventListener('click', saveRule);
     savePeerBtn.addEventListener('click', savePeer);
     refreshPeersBtn.addEventListener('click', () => refreshPeers(true));
+    peerForwardAllInput.addEventListener('change', savePeerForwarding);
     ruleTypeSelect.addEventListener('change', populateRuleEventSelect);
     [ruleSensorInput, ruleTypeSelect, ruleEventSelect].forEach(input => {
       input.addEventListener('keydown', e => {
@@ -4037,8 +4307,9 @@ void setup() {
   server.on("/rules", HTTP_GET, [](AsyncWebServerRequest *request){ handleRulesGet(request); });
   server.on("/rules", HTTP_POST, [](AsyncWebServerRequest *request){ handleRulesPost(request); });
   server.on("/peers", HTTP_GET, [](AsyncWebServerRequest *request){ handlePeersGet(request); });
-  server.on("/peers", HTTP_POST, [](AsyncWebServerRequest *request){ handlePeersPost(request); });
+  server.on("/peers/forwarding", HTTP_POST, [](AsyncWebServerRequest *request){ handlePeerForwardingPost(request); });
   server.on("/peers/test", HTTP_POST, [](AsyncWebServerRequest *request){ handlePeerTest(request); });
+  server.on("/peers", HTTP_POST, [](AsyncWebServerRequest *request){ handlePeersPost(request); });
   server.on("/list", HTTP_GET, [](AsyncWebServerRequest *request){ handleList(request); });
   server.on("/setgain", HTTP_GET, [](AsyncWebServerRequest *request){ handleSetGain(request); });
   server.on("/setlabel", HTTP_POST, [](AsyncWebServerRequest *request){ handleSetLabel(request); });
@@ -4137,6 +4408,7 @@ void loop() {
     mp3->stop();
     stopPlayback();
   }
+  processPendingPeerForward();
   // Retry mDNS if it didn't start yet
   if (!mdnsOk && WiFi.status() == WL_CONNECTED) {
     unsigned long now = millis();

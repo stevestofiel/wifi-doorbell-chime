@@ -29,7 +29,10 @@ useful device.
 - [x] Second chime node assembled on Rev A PCB and validated in enclosure with
   taller ESP32 socket/header clearance.
 - [x] Peer chime list and manual peer test action.
-- [ ] Peer chime forwarding controls.
+- [x] First-pass peer forwarding control for forwarding owner-chime sensor
+  triggers to enabled peers.
+- [ ] Peer reachability diagnostics for IoT/client-isolation failures.
+- [ ] Per-sensor peer forwarding rules.
 - [ ] Peer log aggregation in the chime UI.
 - [ ] MQTT event publishing.
 - [ ] LoRa gateway prototype.
