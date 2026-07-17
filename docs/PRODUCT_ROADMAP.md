@@ -26,6 +26,8 @@ useful device.
 - [x] Sensor-to-sound rule editor UI.
 - [x] Embedded sound budget/spec documented.
 - [x] Wi-Fi radar service button, gain trim, and RCWL motion bench validated.
+- [x] Second chime node assembled on Rev A PCB and validated in enclosure with
+  taller ESP32 socket/header clearance.
 - [ ] Peer chime configuration.
 - [ ] Peer log aggregation in the chime UI.
 - [ ] MQTT event publishing.
@@ -34,7 +36,8 @@ useful device.
 
 ## Next Session Plan
 
-Focus: finish remote sensor physical validation and tune radar deployment.
+Focus: finish remote sensor physical validation, tune radar deployment, and
+prepare remote sensor PCB decisions before ordering another chime PCB revision.
 
 1. Upload the button/touch firmware and verify boot-hold setup reset.
 2. Verify short-press sends a `doorbell.press` event.
@@ -43,6 +46,8 @@ Focus: finish remote sensor physical validation and tune radar deployment.
 4. Mount-test the RCWL radar and tune cooldown/settle timing if needed.
 5. Confirm battery, enclosure, reset-button, and service-button access before
    calling either remote sensor hardware stable.
+6. Sketch the remote sensor PCB requirements, then decide whether to batch those
+   boards with a Rev B chime PCB order.
 
 ## Product Variants
 
