@@ -396,10 +396,14 @@ Consensus model:
 - Each chime is standalone and useful by itself.
 - Multiple chimes form a peer group.
 - Sensors send semantic events rather than sound-file assumptions.
+- A sensor has one owner chime. The owner chime enrolled/configured the sensor
+  and is the sensor's normal HTTP target.
 - Each chime decides locally whether to play, stay silent, log, indicate, or
   relay an event.
 - Each chime stores its own recent event log.
-- Any chime UI may fetch peer logs and merge them into a whole-property view.
+- Event logs stay local-first. A future helper app or troubleshooting view may
+  poll all chimes, and possibly awake/configurable sensors, to build a merged
+  diagnostic view.
 - Event IDs should prevent duplicate playback, relay loops, and duplicate log
   rows.
 - MQTT, Home Assistant, Docker dashboards, and similar systems are optional
@@ -422,8 +426,11 @@ Routing scopes:
 
 Recommended first implementation:
 
-- Sensors can fan out directly to multiple chime URLs.
-- Each chime applies its own local sound rules.
+- Sensors send direct events to one owner chime.
+- The owner chime supports simple per-sensor forwarding: all peers or none.
+- Receiving peer chimes can play forwarded events using built-in defaults.
+- Forwarded unknown sensors need more product/security thought before custom
+  sound behavior is assumed.
 - No dependency on a primary controller.
 
 Later implementation:
@@ -432,6 +439,15 @@ Later implementation:
 - A LoRa gateway chime or selected Wi-Fi chime can relay events to peers.
 - Relayed events must include loop prevention, such as `relay=0`, a hop count,
   or a dedupe event ID.
+- Sensor ownership transfer can move a sensor from one owner chime to another
+  without factory-resetting the sensor.
+- Owner-chime outage fallback needs a future design. Do not require fallback for
+  the first peer-relay implementation.
+- Group forwarding and named peer routing need more design before replacing the
+  first all-or-none forwarding control.
+- A peer chime should not create a full local override for a forwarded sensor in
+  the first design. It may still enforce local safety limits, such as maximum
+  playback gain/volume, quiet behavior, or disabled playback.
 
 ## Peer Chime Configuration
 
