@@ -1,5 +1,11 @@
 {
   "devices": {
+    "button": {
+      "role": "wifi_button_touch",
+      "hardware_id": "1C:DB:D4:83:BF:00",
+      "fqbn": "esp32:esp32:esp32s3:CDCOnBoot=cdc",
+      "sketch": "sensors/wifi_button_touch"
+    },
     "front": {
       "role": "chime",
       "hardware_id": "1C:DB:D4:84:4A:CC",

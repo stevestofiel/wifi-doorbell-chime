@@ -35,6 +35,11 @@ useful device.
   between Front and Shop.
 - [x] Near-simultaneous peer playback bench validated between Front and Shop.
 - [x] Manage preview rapid-playback stability bench validated on Shop.
+- [x] Front cold-boot first-playback retest completed without reproducing the
+  earlier transient stutter.
+- [x] Wi-Fi button/touch boot-hold reset, same-boot setup portal, Shop
+  targeting, service-button and touch triggers, peer forwarding, event logging,
+  and initial false-trigger resistance bench validated.
 - [x] Peer editor progressive disclosure and explicit discovered/saved peer
   actions.
 - [x] `NoTiFi huB` product language and capability-based sensor naming
@@ -51,14 +56,12 @@ useful device.
 Focus: finish remote sensor physical validation, tune radar deployment, and
 prepare remote sensor PCB decisions before ordering another chime PCB revision.
 
-1. Upload the button/touch firmware and verify boot-hold setup reset.
-2. Verify short-press sends a `doorbell.press` event.
-3. Verify touch input behavior and false-trigger resistance at the intended
+1. Verify touch input behavior and false-trigger resistance at the intended
    mounting location.
-4. Mount-test the RCWL radar and tune cooldown/settle timing if needed.
-5. Confirm battery, enclosure, reset-button, service-button, and gain-control
+2. Mount-test the RCWL radar and tune cooldown/settle timing if needed.
+3. Confirm battery, enclosure, reset-button, service-button, and gain-control
    access before calling either remote sensor hardware stable.
-6. Sketch the remote sensor PCB requirements, then decide whether to batch those
+4. Sketch the remote sensor PCB requirements, then decide whether to batch those
    boards with a Rev B chime PCB order.
 
 ## Product Language Direction

@@ -33,7 +33,15 @@ public:
   void begin(bool forceSetupPortal) {
     load();
     if (forceSetupPortal) {
-      WiFi.disconnect(true, true);
+      Serial.println("Config: preparing Wi-Fi for setup reset");
+      WiFi.mode(WIFI_STA);
+      delay(100);
+      bool credentialsCleared = WiFi.disconnect(false, true);
+      WiFi.mode(WIFI_AP_STA);
+      delay(250);
+      Serial.printf("Config: Wi-Fi credentials cleared=%s mode=%d\n",
+                    credentialsCleared ? "yes" : "no",
+                    static_cast<int>(WiFi.getMode()));
       clear();
     }
 
