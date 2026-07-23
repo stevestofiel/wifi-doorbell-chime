@@ -13,6 +13,10 @@
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
 #include <esp_system.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/queue.h>
+#include <freertos/task.h>
+#include <new>
 #include "AudioFileSourceSPIFFS.h"
 #include "AudioFileSourceID3.h"
 #include "AudioFileSourcePROGMEM.h"
@@ -76,6 +80,9 @@ const size_t EVENT_LOG_SIZE = 20;
 const unsigned long PEER_DISCOVERY_INTERVAL_MS = 60000;
 const uint16_t PEER_DISCOVERY_PORT = 42142;
 const size_t DISCOVERED_PEER_MAX = 10;
+const size_t PEER_FORWARD_TARGET_MAX = DISCOVERED_PEER_MAX * 2;
+const size_t PEER_FORWARD_QUEUE_DEPTH = 4;
+const size_t PLAYBACK_QUEUE_DEPTH = 4;
 const char* PEER_DISCOVERY_PROBE = "DCHIME_DISCOVER";
 const char* PEER_DISCOVERY_REPLY = "DCHIME_HERE";
 
@@ -127,19 +134,39 @@ RawMdnsPeerResult rawMdnsPeerResults[DISCOVERED_PEER_MAX];
 int lastPeerQueryCount = -1;
 unsigned long lastPeerDiscoveryMs = 0;
 
+struct PeerForwardTarget {
+  String id;
+  String label;
+  String url;
+  String token;
+};
+
 struct PendingPeerForward {
-  bool active = false;
   String sensorId;
   String sensorType;
   String eventType;
   String input;
   String eventId;
   float eventGain = 1.0f;
-  unsigned long dueMs = 0;
-  unsigned long createdMs = 0;
+  size_t targetCount = 0;
+  PeerForwardTarget targets[PEER_FORWARD_TARGET_MAX];
 };
 
-PendingPeerForward pendingPeerForward;
+struct PeerForwardResult {
+  PendingPeerForward *work = nullptr;
+  size_t sent = 0;
+  int lastStatus = 0;
+};
+
+struct PendingPlayback {
+  String path;
+  float eventGain = 1.0f;
+};
+
+QueueHandle_t peerForwardQueue = nullptr;
+QueueHandle_t peerForwardResultQueue = nullptr;
+TaskHandle_t peerForwardTaskHandle = nullptr;
+QueueHandle_t playbackQueue = nullptr;
 
 void onConfigSaved() {
   shouldReboot = true;
@@ -852,7 +879,9 @@ int httpGetWithWiFiClient(const String &target, unsigned long timeoutMs, String 
   unsigned long start = millis();
   IPAddress ip;
   bool isIpAddress = ip.fromString(host);
-  bool connected = isIpAddress ? client.connect(ip, port) : client.connect(host.c_str(), port);
+  bool connected = isIpAddress
+    ? client.connect(ip, port, (int32_t)timeoutMs)
+    : client.connect(host.c_str(), port, (int32_t)timeoutMs);
   if (!connected) return -1;
 
   client.print(String("GET ") + path + " HTTP/1.1\r\n" +
@@ -873,14 +902,17 @@ int httpGetWithWiFiClient(const String &target, unsigned long timeoutMs, String 
   int secondSpace = statusLine.indexOf(' ', firstSpace + 1);
   int status = firstSpace >= 0 ? statusLine.substring(firstSpace + 1, secondSpace > firstSpace ? secondSpace : statusLine.length()).toInt() : -4;
 
-  while (client.connected() || client.available()) {
-    if (client.available()) {
+  // The status line is the forwarding acknowledgement. Briefly drain any
+  // immediately available response bytes for diagnostics, then close instead
+  // of occupying the worker until a keep-alive/close timeout expires.
+  unsigned long drainStart = millis();
+  while ((millis() - drainStart) < 25) {
+    while (client.available()) {
       char c = (char)client.read();
       if (bodyOut.length() < 160) bodyOut += c;
-    } else {
-      delay(1);
     }
-    if ((millis() - start) >= timeoutMs) break;
+    if (!client.connected()) break;
+    delay(1);
   }
   client.stop();
   return status > 0 ? status : -4;
@@ -1134,20 +1166,53 @@ int sendPeerTrigger(const String &url,
   return httpGetWithWiFiClient(target, 4000, bodyOut);
 }
 
-void forwardSensorTriggerToPeers(const String &sensorId,
-                                 const String &sensorType,
-                                 const String &eventType,
-                                 const String &input,
-                                 const String &eventId,
-                                 float eventGain) {
+bool appendPeerForwardTarget(PendingPeerForward &work,
+                             const String &id,
+                             const String &label,
+                             const String &url,
+                             const String &token) {
+  if (url.length() == 0) return false;
+  for (size_t i = 0; i < work.targetCount; ++i) {
+    const PeerForwardTarget &target = work.targets[i];
+    if ((id.length() > 0 && target.id == id) || target.url == url) return false;
+  }
+  if (work.targetCount >= PEER_FORWARD_TARGET_MAX) {
+    Serial.println("Peer forward: target limit reached");
+    return false;
+  }
+
+  PeerForwardTarget &target = work.targets[work.targetCount++];
+  target.id = id;
+  target.label = label.length() > 0 ? label : id;
+  target.url = url;
+  target.token = token;
+  return true;
+}
+
+PendingPeerForward *preparePeerForward(const String &sensorId,
+                                       const String &sensorType,
+                                       const String &eventType,
+                                       const String &input,
+                                       const String &eventId,
+                                       float eventGain) {
   DynamicJsonDocument doc(6144);
   loadPeersDocument(doc);
-  if (!peerForwardingEnabled(doc)) return;
+  if (!peerForwardingEnabled(doc)) return nullptr;
 
-  discoverPeerChimes(false);
-  size_t attempted = 0;
-  size_t sent = 0;
-  int lastStatus = 0;
+  PendingPeerForward *work = new (std::nothrow) PendingPeerForward();
+  if (!work) {
+    Serial.println("Peer forward: work allocation failed");
+    return nullptr;
+  }
+  work->sensorId = sensorId;
+  work->sensorType = sensorType;
+  work->eventType = eventType;
+  work->input = input;
+  work->eventId = eventId;
+  work->eventGain = eventGain;
+
+  // Build an in-memory target snapshot before playback starts. The background
+  // worker must not touch SPIFFS while the decoder is streaming a sound file.
 
   for (size_t i = 0; i < DISCOVERED_PEER_MAX; ++i) {
     if (!discoveredPeers[i].active) continue;
@@ -1159,85 +1224,166 @@ void forwardSensorTriggerToPeers(const String &sensorId,
     bool saved = false;
     copySavedPeerOverride(doc, id, url, label, enabled, peerToken, saved);
     if (!enabled || url.length() == 0) continue;
-
-    String body;
-    int status = sendPeerTrigger(url, peerToken, sensorId, sensorType, eventType, input, eventId, eventGain, body);
-    lastStatus = status;
-    attempted++;
-    if (status >= 200 && status < 300) sent++;
-    Serial.printf("Peer forward: %s -> %d\n", label.c_str(), status);
+    appendPeerForwardTarget(*work, id, label, url, peerToken);
   }
 
   for (JsonObject peer : doc["peers"].as<JsonArray>()) {
     String id = peer["id"] | "";
     String url = cleanPeerUrl(peer["url"] | "");
-    bool alreadyDiscovered = false;
-    for (size_t i = 0; i < DISCOVERED_PEER_MAX; ++i) {
-      if (!discoveredPeers[i].active) continue;
-      if (savedPeerMatches(peer, discoveredPeers[i].id, discoveredPeers[i].url)) {
-        alreadyDiscovered = true;
-        break;
-      }
-    }
-    if (alreadyDiscovered) continue;
     if (!(peer["enabled"] | true) || url.length() == 0) continue;
 
     String peerToken = peer["token"] | "";
     String label = peer["label"] | "";
     if (label.length() == 0) label = id;
-    String body;
-    int status = sendPeerTrigger(url, peerToken, sensorId, sensorType, eventType, input, eventId, eventGain, body);
-    lastStatus = status;
-    attempted++;
-    if (status >= 200 && status < 300) sent++;
-    Serial.printf("Peer forward: %s -> %d\n", label.c_str(), status);
+    appendPeerForwardTarget(*work, id, label, url, peerToken);
   }
 
-  if (attempted > 0) {
-    Serial.printf("Peer forward: sent %u/%u\n", (unsigned)sent, (unsigned)attempted);
-    String status = sent == attempted ? "sent" : (sent > 0 ? "partial" : "failed");
-    recordChimeEvent(eventId + "-forward",
-                     sensorId,
+  if (work->targetCount == 0) {
+    delete work;
+    return nullptr;
+  }
+  return work;
+}
+
+void peerForwardTask(void *parameter) {
+  (void)parameter;
+  for (;;) {
+    PendingPeerForward *work = nullptr;
+    if (xQueueReceive(peerForwardQueue, &work, portMAX_DELAY) != pdTRUE || !work) continue;
+
+    PeerForwardResult *result = new (std::nothrow) PeerForwardResult();
+    if (!result) {
+      Serial.println("Peer forward: result allocation failed");
+      delete work;
+      continue;
+    }
+    result->work = work;
+
+    for (size_t i = 0; i < work->targetCount; ++i) {
+      const PeerForwardTarget &target = work->targets[i];
+      String body;
+      int status = sendPeerTrigger(target.url,
+                                   target.token,
+                                   work->sensorId,
+                                   work->sensorType,
+                                   work->eventType,
+                                   work->input,
+                                   work->eventId,
+                                   work->eventGain,
+                                   body);
+      result->lastStatus = status;
+      if (status >= 200 && status < 300) result->sent++;
+      Serial.printf("Peer forward: %s -> %d\n", target.label.c_str(), status);
+    }
+
+    if (xQueueSend(peerForwardResultQueue, &result, pdMS_TO_TICKS(100)) != pdTRUE) {
+      Serial.println("Peer forward: result queue full");
+      delete result->work;
+      delete result;
+    }
+  }
+}
+
+bool startPeerForwardWorker() {
+  peerForwardQueue = xQueueCreate(PEER_FORWARD_QUEUE_DEPTH, sizeof(PendingPeerForward *));
+  peerForwardResultQueue = xQueueCreate(PEER_FORWARD_QUEUE_DEPTH, sizeof(PeerForwardResult *));
+  if (!peerForwardQueue || !peerForwardResultQueue) {
+    Serial.println("Peer forward: queue allocation failed");
+    return false;
+  }
+
+  BaseType_t started = xTaskCreatePinnedToCore(peerForwardTask,
+                                               "peer-forward",
+                                               8192,
+                                               nullptr,
+                                               1,
+                                               &peerForwardTaskHandle,
+                                               0);
+  if (started != pdPASS) {
+    Serial.println("Peer forward: task creation failed");
+    peerForwardTaskHandle = nullptr;
+    return false;
+  }
+  Serial.println("Peer forward: background worker ready");
+  return true;
+}
+
+void schedulePeerForward(PendingPeerForward *work) {
+  if (!work) return;
+  if (!peerForwardQueue || xQueueSend(peerForwardQueue, &work, 0) != pdTRUE) {
+    Serial.println("Peer forward: queue full");
+    delete work;
+  }
+}
+
+void processPeerForwardResults() {
+  if (!peerForwardResultQueue) return;
+  PeerForwardResult *result = nullptr;
+  while (xQueueReceive(peerForwardResultQueue, &result, 0) == pdTRUE) {
+    if (!result || !result->work) {
+      delete result;
+      continue;
+    }
+
+    PendingPeerForward *work = result->work;
+    size_t attempted = work->targetCount;
+    Serial.printf("Peer forward: sent %u/%u\n", (unsigned)result->sent, (unsigned)attempted);
+    String status = result->sent == attempted ? "sent" : (result->sent > 0 ? "partial" : "failed");
+    recordChimeEvent(work->eventId + "-forward",
+                     work->sensorId,
                      "peer-forward",
                      status,
                      "peer-forward",
-                     String(sent) + "/" + String(attempted) + ":" + String(lastStatus),
+                     String(result->sent) + "/" + String(attempted) + ":" + String(result->lastStatus),
                      "",
                      "enabled-peers",
-                     eventGain);
+                     work->eventGain);
+    delete work;
+    delete result;
+    result = nullptr;
   }
 }
 
-void schedulePeerForward(const String &sensorId,
-                         const String &sensorType,
-                         const String &eventType,
-                         const String &input,
-                         const String &eventId,
-                         float eventGain) {
-  pendingPeerForward.active = true;
-  pendingPeerForward.sensorId = sensorId;
-  pendingPeerForward.sensorType = sensorType;
-  pendingPeerForward.eventType = eventType;
-  pendingPeerForward.input = input;
-  pendingPeerForward.eventId = eventId;
-  pendingPeerForward.eventGain = eventGain;
-  pendingPeerForward.createdMs = millis();
-  pendingPeerForward.dueMs = pendingPeerForward.createdMs + 250;
+bool startPlaybackQueue() {
+  playbackQueue = xQueueCreate(PLAYBACK_QUEUE_DEPTH, sizeof(PendingPlayback *));
+  if (!playbackQueue) {
+    Serial.println("Playback: queue allocation failed");
+    return false;
+  }
+  Serial.println("Playback: main-loop queue ready");
+  return true;
 }
 
-void processPendingPeerForward() {
-  if (!pendingPeerForward.active) return;
-  if ((long)(millis() - pendingPeerForward.dueMs) < 0) return;
-  if (playbackRunning() && (millis() - pendingPeerForward.createdMs) < 8000) return;
+bool schedulePlayback(const String &path, float eventGain = 1.0f) {
+  if (!playbackQueue || path.length() == 0 || !SPIFFS.exists(path)) return false;
 
-  PendingPeerForward work = pendingPeerForward;
-  pendingPeerForward.active = false;
-  forwardSensorTriggerToPeers(work.sensorId,
-                              work.sensorType,
-                              work.eventType,
-                              work.input,
-                              work.eventId,
-                              work.eventGain);
+  PendingPlayback *request = new (std::nothrow) PendingPlayback();
+  if (!request) {
+    Serial.println("Playback: request allocation failed");
+    return false;
+  }
+  request->path = path;
+  request->eventGain = eventGain;
+
+  if (xQueueSend(playbackQueue, &request, 0) == pdTRUE) return true;
+
+  // Under rapid preview clicks, discard the oldest request rather than letting
+  // web callbacks manipulate a decoder that is running in the main loop.
+  PendingPlayback *stale = nullptr;
+  if (xQueueReceive(playbackQueue, &stale, 0) == pdTRUE) delete stale;
+  if (xQueueSend(playbackQueue, &request, 0) == pdTRUE) return true;
+
+  Serial.println("Playback: queue full");
+  delete request;
+  return false;
+}
+
+void processPendingPlayback() {
+  if (!playbackQueue) return;
+  PendingPlayback *request = nullptr;
+  if (xQueueReceive(playbackQueue, &request, 0) != pdTRUE || !request) return;
+  playChimePath(request->path, request->eventGain);
+  delete request;
 }
 
 void handlePeerForwardingPost(AsyncWebServerRequest *request) {
@@ -1413,7 +1559,10 @@ void handlePlayByKey(AsyncWebServerRequest *request) {
     sendTriggerResponse(request, 404, "Sound key not found");
     return;
   }
-  playChimePath(path);
+  if (!schedulePlayback(path)) {
+    sendTriggerResponse(request, 503, "Playback queue unavailable");
+    return;
+  }
   recordChimeEvent("", "", "chime", "play-key", "http", "", key, path);
   sendTriggerResponse(request, 200, "Chime triggered OK");
 }
@@ -1922,13 +2071,19 @@ void handleChime(AsyncWebServerRequest *request) {
       sendTriggerResponse(request, 404, "Sound index not found");
       return;
     }
-    playChimePath(path);
+    if (!schedulePlayback(path)) {
+      sendTriggerResponse(request, 503, "Playback queue unavailable");
+      return;
+    }
     recordChimeEvent("", "", "chime", "play-index", "http", "", String(idx), path);
     sendTriggerResponse(request, 200, "Chime triggered OK");
     return;
   }
 
-  playChime();
+  if (!schedulePlayback(activeFilePath)) {
+    sendTriggerResponse(request, 503, "Playback queue unavailable");
+    return;
+  }
   recordChimeEvent("", "", "chime", "play-active", "http", "", "", activeFilePath);
   sendTriggerResponse(request, 200, "Chime triggered OK");
 }
@@ -1970,16 +2125,15 @@ void handleSensorTrigger(AsyncWebServerRequest *request) {
     }
   }
 
-  if (sound.path == activeFilePath) {
-    playChime(eventGain);
-  } else {
-    playChimePath(sound.path, eventGain);
+  PendingPeerForward *peerForward = nullptr;
+  if (relay != "0" && sensorType != "peer") {
+    peerForward = preparePeerForward(sensorId, sensorType, eventType, input, eventId, eventGain);
   }
+
+  schedulePlayback(sound.path, eventGain);
   String source = relay == "0" ? "peer" : "http";
   recordChimeEvent(eventId, sensorId, sensorType, eventType, source, input, sound.key, sound.path, eventGain);
-  if (relay != "0" && sensorType != "peer") {
-    schedulePeerForward(sensorId, sensorType, eventType, input, eventId, eventGain);
-  }
+  schedulePeerForward(peerForward);
   sendTriggerResponse(request, 200, "Sensor trigger OK");
 }
 
@@ -3557,6 +3711,8 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         .catch(() => {});
     }
 
+    let suppressEventRefreshUntil = 0;
+
     const eventAge = (ms) => {
       if (ms < 1000) return 'now';
       const sec = Math.floor(ms / 1000);
@@ -3576,6 +3732,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     }
 
     const refreshEvents = () => {
+      if (Date.now() < suppressEventRefreshUntil) return;
       fetch('/events')
         .then(r => r.json())
         .then(data => {
@@ -4016,11 +4173,11 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             play.addEventListener('click', e => {
               e.preventDefault();
               e.stopPropagation();
+              suppressEventRefreshUntil = Date.now() + 8000;
               const endpoint = item.endpoint || `/play?key=${encodeURIComponent(item.key || '')}`;
               fetchAuth(endpoint)
                 .then(r => {
                   if (!r.ok) throw new Error(`Play failed (${r.status})`);
-                  setTimeout(refreshEvents, 250);
                 })
                 .catch(err => alert(err.message || 'Play failed'));
             });
@@ -4390,6 +4547,8 @@ void setup() {
   WiFi.setHostname(mdnsName.c_str());
 
   Serial.print("IP: "); Serial.println(WiFi.localIP());
+  startPlaybackQueue();
+  startPeerForwardWorker();
 
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request){ handleRoot(request); });
   server.on("/chime", HTTP_GET, [](AsyncWebServerRequest *request){ handleChime(request); });
@@ -4439,7 +4598,10 @@ void setup() {
               sendTriggerResponse(request, 400, "Invalid gain");
               return;
             }
-            playChimePath(path);
+            if (!schedulePlayback(path)) {
+              sendTriggerResponse(request, 503, "Playback queue unavailable");
+              return;
+            }
             recordChimeEvent("", "", "chime", "play-index", "http", "", String(idx), path);
             sendTriggerResponse(request, 200, "Chime triggered OK");
             return;
@@ -4491,6 +4653,7 @@ void loop() {
   }
   wasPressed = pressed;
   maintainEventLed();
+  processPendingPlayback();
 
   if (wav && wav->isRunning() && !wav->loop()) {
     wav->stop();
@@ -4500,7 +4663,7 @@ void loop() {
     mp3->stop();
     stopPlayback();
   }
-  processPendingPeerForward();
+  processPeerForwardResults();
   // Retry mDNS if it didn't start yet
   if (!mdnsOk && WiFi.status() == WL_CONNECTED) {
     unsigned long now = millis();
