@@ -55,8 +55,15 @@ NoTiFi motioN
 NoTiFi contacT
 ```
 
-The final capital may also receive the product accent color in logos, packaging,
-and product headers.
+The final capital receives the product accent color in logos, packaging, and
+product headers. Wi-Fi-only and LoRa-capable `NoTiFi huB` variants use
+distinctly different `huB` accent colors so the communication tier is visible
+at a glance. Exact hub colors and the sensor-family color system remain to be
+selected.
+
+Color reinforces the model identity but must not be the only differentiator.
+Packaging, enclosure markings, accessible UI text, and device metadata should
+also identify Wi-Fi-only and LoRa-capable variants explicitly.
 
 Do not force brand capitalization into ordinary grammar:
 
@@ -65,9 +72,8 @@ Do not force brand capitalization into ordinary grammar:
 - Write `sensor` and `sensors` normally.
 - Avoid pluralizing a product mark. Prefer `NoTiFi huB devices` or simply
   `hubs`.
-- Use a plain accessible name such as `NoTiFi Hub, Notification Hub` when a
-  screen reader, browser title, metadata field, or search context benefits from
-  conventional spelling.
+- Use a plain accessible name such as `NoTiFi Hub, Notification Hub` for screen
+  readers, browser tabs and history, bookmarks, logs, or device metadata.
 
 ## Separate Model From Deployment
 
@@ -110,9 +116,10 @@ anticipated by its original designer.
 
 ## Candidate Sensor Families
 
-Only `NoTiFi huB` is established by this decision. Sensor model names remain
-working candidates until hardware scope, industrial design, and product
-positioning are settled.
+`NoTiFi huB` is established by this decision, and capacitive touch is a distinct
+`NoTiFi toucH` product direction rather than part of `NoTiFi buttoN`. Other
+sensor model names remain working candidates until hardware scope, industrial
+design, and product positioning are settled.
 
 | Candidate | General capability | Possible technologies or inputs |
 |---|---|---|
@@ -134,6 +141,34 @@ Radar variant
 
 Technology-specific naming remains appropriate when the technology materially
 changes installation, performance, regulation, or customer expectations.
+
+## Common Sensor Controls
+
+Every NoTiFi sensor product requires two physically reachable base controls:
+
+1. A setup/test/service push button.
+2. A user-adjustable event-gain potentiometer.
+
+The shared controls should behave consistently across sensor families:
+
+- Holding the service button during boot clears saved Wi-Fi and sensor settings
+  and starts setup mode.
+- A short service-button press while running sends a test event.
+- The gain potentiometer controls the relative sound level requested for that
+  sensor's events; the receiving hub retains final master-volume and safety
+  limits.
+- Enclosures must preserve practical access to both controls.
+
+Do not silently redefine the common gain potentiometer as a live detection
+threshold on selected products. Light, tilt, range, and similar sensors should
+prefer a clear service-button "teach" or calibration gesture that stores the
+current physical condition as the threshold. A separate product-specific trim
+is appropriate when continuous independent threshold adjustment is genuinely
+required.
+
+This preserves one meaning for the shared gain control while allowing
+sensor-specific calibration behavior. Exact teach gestures, feedback, and any
+need for a second trim remain hardware and UX decisions.
 
 ## Use Cases And Kits
 
@@ -234,7 +269,7 @@ Apply the terminology in deliberate stages:
 1. Review and approve this naming architecture.
 2. Update firmware UI copy without changing protocols or saved state.
 3. Update setup instructions and sensor portal labels.
-4. Update roadmap, use-case, marketing, hardware, and README prose.
+4. Update remaining use-case, marketing, hardware, and README prose.
 5. Consider optional protocol aliases only if they provide concrete user value.
 6. Perform separate trademark, domain, and marketplace research before treating
    candidate names as commercially cleared.
@@ -242,9 +277,8 @@ Apply the terminology in deliberate stages:
 ## Open Naming Questions
 
 - Which candidate sensor model names should become final?
-- Is capacitive touch part of `NoTiFi buttoN` or a distinct `NoTiFi toucH`
-  product?
-- Which product families receive distinct accent colors?
+- Which exact accent colors distinguish Wi-Fi and LoRa-capable hubs?
+- What color system, if any, should distinguish sensor families?
 - How should model variants appear on packaging and in device metadata?
 - Should the browser title use only `NoTiFi huB` or include
-  `Notification Hub` for search and accessibility?
+  `Notification Hub` for accessibility and browser-tab clarity?
