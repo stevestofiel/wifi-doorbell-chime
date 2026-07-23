@@ -52,7 +52,7 @@ const char* SOUNDS_FILE      = "/sounds.json";
 const char* DEVICE_FILE      = "/device.json";
 const char* RULES_FILE       = "/rules.json";
 const char* PEERS_FILE       = "/peers.json";
-String      displayFilename  = "No chime loaded";
+String      displayFilename  = "No sound selected";
 bool        uploadSucceeded  = false;
 String      uploadError      = "";
 String      uploadTargetPath = "";
@@ -1781,7 +1781,7 @@ bool resolveSensorSound(const String &explicitKey,
 
 // ── Load sounds config ─────────────────────────────────────────────────────
 void loadSoundsConfig() {
-  displayFilename = "No chime loaded";
+  displayFilename = "No sound selected";
   activeFilePath = "";
 
   if (SPIFFS.exists(SOUNDS_FILE)) {
@@ -2272,7 +2272,7 @@ static const char ROOT_PAGE_TEMPLATE[] PROGMEM = R"rawliteral(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Doorbell Chime</title>
+  <title>NoTiFi Hub — Notification Hub</title>
   <style>
     :root {
       --bg:#090d14;
@@ -2312,6 +2312,7 @@ static const char ROOT_PAGE_TEMPLATE[] PROGMEM = R"rawliteral(
     }
     .topline {display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; margin-bottom:1.1rem;}
     h1 {font-size:1.45rem; line-height:1.1; margin:0; letter-spacing:0; color:var(--text);}
+    .brand-model {display:inline-block; font-size:0.72em; font-weight:650; color:var(--blue-hi);}
     .device-id {margin-top:0.35rem; color:var(--muted); font-size:0.86rem; overflow-wrap:anywhere;}
     .status-pill {
       color:#c7d2fe;
@@ -2455,8 +2456,8 @@ static const char ROOT_PAGE_TEMPLATE[] PROGMEM = R"rawliteral(
   <div class="card">
     <div class="topline">
       <div>
-        <h1>Doorbell Chime</h1>
-        <div class="device-id">__HOSTNAME__ · __IPADDR__</div>
+        <h1>NoTiFi <span class="brand-model">huB</span></h1>
+        <div class="device-id">Notification Hub · __HOSTNAME__ · __IPADDR__</div>
       </div>
       <div class="status-pill">__STATUS__</div>
     </div>
@@ -2489,7 +2490,7 @@ static const char ROOT_PAGE_TEMPLATE[] PROGMEM = R"rawliteral(
     </div>
 
     <div class="actions">
-      <a href="/manage"><button class="manage-btn">Manage Chimes</button></a>
+      <a href="/manage"><button class="manage-btn">Manage Hub</button></a>
     </div>
   </div>
 
@@ -2544,8 +2545,8 @@ static const char ROOT_PAGE_TEMPLATE[] PROGMEM = R"rawliteral(
 
 void handleRoot(AsyncWebServerRequest *request) {
   bool hasChime = SPIFFS.exists(activeFilePath);
-  String statusLine = hasChime ? "Chime Loaded" : "Chime Missing";
-  String fileInfo = "No chime loaded";
+  String statusLine = hasChime ? "Sound Ready" : "No Sound";
+  String fileInfo = "No sound selected";
   if (hasChime) {
     File f = SPIFFS.open(activeFilePath, "r");
     if (f) {
@@ -2556,8 +2557,8 @@ void handleRoot(AsyncWebServerRequest *request) {
   }
 
   String playButtonHTML = hasChime ?
-    "<button id=\"playBtn\" class=\"play-btn\" type=\"button\" title=\"Play the active chime now\"><span class=\"play-icon\" aria-hidden=\"true\"></span><span class=\"play-label\">Play</span></button>" :
-    "<button class=\"play-btn\" disabled title=\"Upload or select a chime before playing\"><span class=\"play-icon\" aria-hidden=\"true\"></span><span class=\"play-label\">No Chime</span></button>";
+    "<button id=\"playBtn\" class=\"play-btn\" type=\"button\" title=\"Play the active sound now\"><span class=\"play-icon\" aria-hidden=\"true\"></span><span class=\"play-label\">Play Sound</span></button>" :
+    "<button class=\"play-btn\" disabled title=\"Upload or select a sound before playing\"><span class=\"play-icon\" aria-hidden=\"true\"></span><span class=\"play-label\">No Sound</span></button>";
 
   int rssi = (WiFi.status() == WL_CONNECTED) ? WiFi.RSSI() : -100;
   int signalPct = rssi <= -100 ? 0 : (rssi >= -50 ? 100 : (rssi + 100) * 2);
@@ -2601,7 +2602,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Manage Chimes</title>
+  <title>NoTiFi Hub — Manage Hub</title>
   <style>
     :root {
       --primary: #5aa2ff;
@@ -3144,12 +3145,12 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
 <body>
   <div class="card">
     <div class="topbar">
-      <h1>Manage Chimes</h1>
-      <a class="home-link" href="/" title="Return to the simple chime status and play page">Home</a>
+      <h1>Manage Hub</h1>
+      <a class="home-link" href="/" title="Return to the hub status and sound page">Home</a>
     </div>
     <div class="status">
       <div class="big" id="deviceStatus">Loading…</div>
-      <div class="sub" id="deviceActive">No chime loaded</div>
+      <div class="sub" id="deviceActive">No sound selected</div>
       <div>
         <div class="tiny">Local hostname: <span id="deviceHostname">doorbell</span></div>
         <div class="tiny">mDNS address: <span id="deviceMdns">doorbell.local</span></div>
@@ -3176,11 +3177,11 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     </div>
 
     <div class="tabbar" role="tablist" aria-label="Manage sections">
-      <button class="active" type="button" data-tab="chimes" title="Select, preview, or delete uploaded chime sounds">Chimes</button>
+      <button class="active" type="button" data-tab="chimes" title="Select, preview, or delete uploaded sounds">Sounds</button>
       <button type="button" data-tab="rules" title="Map sensor events to specific sounds">Rules</button>
-      <button type="button" data-tab="peers" title="View discovered peer chimes and save peer overrides">Peers</button>
-      <button type="button" data-tab="events" title="View recent sensor and chime events">Events</button>
-      <button type="button" data-tab="upload" title="Upload a new WAV or MP3 chime sound">Upload</button>
+      <button type="button" data-tab="peers" title="View discovered peer hubs and save peer overrides">Peer Hubs</button>
+      <button type="button" data-tab="events" title="View recent sensor and hub events">Events</button>
+      <button type="button" data-tab="upload" title="Upload a new WAV or MP3 sound file">Upload</button>
       <button type="button" data-tab="device" title="Adjust volume, device name, Wi-Fi, and advanced network options">Device</button>
       <button type="button" data-tab="security" title="Set the LAN admin password and manage protected actions">Security</button>
     </div>
@@ -3188,7 +3189,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     <div class="manage-grid">
       <div class="side-stack">
         <div class="section tab-panel active" data-panel="chimes">
-          <h2>Chimes</h2>
+          <h2>Sounds</h2>
           <div id="soundList" style="text-align:left;">Loading…</div>
         </div>
 
@@ -3196,10 +3197,10 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           <h2>Upload Sound</h2>
           <form id="uploadForm" action="/upload" method="POST" enctype="multipart/form-data">
             <label for="fileInput" class="prompt">Choose a WAV or MP3 file</label>
-            <input type="file" id="fileInput" name="file" accept=".wav,.mp3" title="Choose a WAV or MP3 file to upload to the chime" required>
+            <input type="file" id="fileInput" name="file" accept=".wav,.mp3" title="Choose a WAV or MP3 sound file to upload to the hub" required>
             <div id="fileName"></div>
             <div id="fileSize"></div>
-            <button type="submit" id="uploadBtn" title="Upload the selected sound and make it available as a chime" disabled>
+            <button type="submit" id="uploadBtn" title="Upload the selected sound file to the hub" disabled>
               <span class="spin btn-spin" aria-hidden="true"></span>
               <span id="uploadText">Upload</span>
             </button>
@@ -3245,36 +3246,36 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         </div>
 
         <div class="section tab-panel" data-panel="peers">
-          <h2>Peers</h2>
+          <h2>Peer Hubs</h2>
           <div class="event-actions peer-toolbar">
             <label class="peer-forward-row">
-              <input id="peerForwardAllInput" type="checkbox" title="Forward incoming sensor triggers to enabled peer chimes">
-              Forward sensor triggers to peers
+              <input id="peerForwardAllInput" type="checkbox" title="Forward directly received sensor events to enabled peer hubs">
+              Forward direct sensor events to peer hubs
             </label>
             <div class="peer-toolbar-buttons">
-              <button id="addPeerBtn" type="button" title="Add a peer chime manually">Add Peer</button>
-              <button id="refreshPeersBtn" type="button" title="Scan the local network for peer chimes">Scan for Chimes</button>
+              <button id="addPeerBtn" type="button" title="Add a peer hub manually">Add Hub</button>
+              <button id="refreshPeersBtn" type="button" title="Scan the local network for peer hubs">Scan for Hubs</button>
             </div>
           </div>
           <div id="peerForm" class="peer-form" hidden>
             <div class="peer-editor-heading">
-              <h3 id="peerEditorTitle">Add Peer</h3>
+              <h3 id="peerEditorTitle">Add Peer Hub</h3>
               <button id="cancelPeerBtn" type="button" title="Close the peer editor without saving">Cancel</button>
             </div>
             <div class="peer-row">
               <div class="peer-field">
                 <label for="peerLabelInput">Label</label>
-                <input id="peerLabelInput" type="text" maxlength="40" placeholder="Enter peer label" autocomplete="off" title="Friendly peer chime label">
+                <input id="peerLabelInput" type="text" maxlength="40" placeholder="Enter hub label" autocomplete="off" title="Friendly peer hub label">
               </div>
               <div class="peer-field">
-                <label for="peerUrlInput">URL</label>
-                <input id="peerUrlInput" type="text" maxlength="96" placeholder="http://peer-chime.local" autocomplete="off" title="Peer chime base URL">
+                <label for="peerUrlInput">Hub URL</label>
+                <input id="peerUrlInput" type="text" maxlength="96" placeholder="http://peer-hub.local" autocomplete="off" title="Peer hub base URL">
               </div>
             </div>
             <div class="peer-row">
               <div class="peer-field">
-                <label for="peerTokenInput">Peer Token</label>
-                <input id="peerTokenInput" type="password" maxlength="64" placeholder="optional" autocomplete="new-password" title="Peer chime playback/admin token, if required">
+                <label for="peerTokenInput">Hub Token</label>
+                <input id="peerTokenInput" type="password" maxlength="64" placeholder="optional" autocomplete="new-password" title="Peer hub playback/admin token, if required">
               </div>
               <label class="peer-enabled-row">
                 <input id="peerEnabledInput" type="checkbox" checked title="Enable this peer for tests and future forwarding">
@@ -3283,11 +3284,11 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             </div>
             <input id="peerIdInput" type="hidden" value="">
             <div class="peer-actions">
-              <button id="savePeerBtn" type="button" title="Save or replace this peer chime">Save Peer</button>
+              <button id="savePeerBtn" type="button" title="Save or replace this peer hub">Save Hub</button>
             </div>
           </div>
           <div id="peerSaveState" class="peer-save-state"></div>
-          <div class="network-help">Discovered chimes come from `_doorbell-chime._tcp` mDNS plus local UDP fallback. Saved settings are overrides.</div>
+          <div class="network-help">Discovered hubs use the legacy `_doorbell-chime._tcp` mDNS service plus local UDP fallback. Saved settings are overrides.</div>
           <div id="peerList" class="peer-list">
             <div class="peer-empty">Loading...</div>
           </div>
@@ -3468,7 +3469,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     }
 
     const promptForToken = () => {
-      const token = prompt('Enter LAN admin password for this chime');
+      const token = prompt('Enter the LAN admin password for this hub');
       if (token === null) return false;
       rememberToken(token);
       if (tokenInput) tokenInput.value = '';
@@ -3702,9 +3703,9 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           fsBar.className = barClass(100 - usedPct, 30, 15);
 
           maxBytes = Math.max(0, ((s.fsFreeKB ?? 0) * 1024) - (4 * 1024));
-          const activeName = s.activeName || 'No chime loaded';
+          const activeName = s.activeName || 'No sound selected';
           const hasActive = (s.activePath || '').length > 0;
-          deviceStatus.textContent = hasActive ? 'Active Chime' : 'No Chime Loaded';
+          deviceStatus.textContent = hasActive ? 'Active Sound' : 'No Sound Selected';
           deviceActive.textContent = activeName;
           deviceHostname.textContent = s.hostname || 'doorbell';
           deviceMdns.textContent = s.mdns || 'doorbell.local';
@@ -3743,8 +3744,14 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     }
 
     const eventTitle = (item) => {
-      const sensor = item.sensor || item.source || 'chime';
       const event = item.event || 'trigger';
+      if (item.type === 'chime') {
+        if (event === 'play-active') return 'Hub playback: active sound';
+        if (event === 'play-index' || event === 'play-key') return 'Hub playback: selected sound';
+        if (event === 'local-button') return 'Hub button: sound test';
+        return `Hub playback: ${event}`;
+      }
+      const sensor = item.sensor || item.source || 'hub';
       const type = item.type ? ` ${item.type}` : '';
       return `${sensor}${type}: ${event}`;
     }
@@ -3857,7 +3864,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           return `${name}${item.self ? ' (self)' : ''}`;
         }).join(', ');
         const rawText = raw ? ` Raw: ${raw}.` : '';
-        peerList.innerHTML = `<div class="peer-empty">No discovered or saved peer chimes yet. ${mdns}; query ${queryCount}; ${count} usable.${rawText}</div>`;
+        peerList.innerHTML = `<div class="peer-empty">No discovered or saved peer hubs yet. ${mdns}; query ${queryCount}; ${count} usable.${rawText}</div>`;
         return;
       }
 
@@ -3920,15 +3927,15 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
 
     const refreshPeers = (force = false) => {
       const url = force ? '/peers?refresh=1' : '/peers';
-      if (force) setPeerSaveState('Scanning for chimes...');
+      if (force) setPeerSaveState('Scanning for hubs...');
       return fetch(url)
         .then(r => r.json())
         .then(data => {
-          if (force) setPeerSaveState('Chime scan complete', 'ok');
+          if (force) setPeerSaveState('Hub scan complete', 'ok');
           renderPeers(data);
         })
         .catch(() => {
-          if (force) setPeerSaveState('Chime scan failed', 'error');
+          if (force) setPeerSaveState('Hub scan failed', 'error');
           peerList.innerHTML = '<div class="peer-empty">Unable to load peers.</div>';
         });
     }
@@ -3953,12 +3960,12 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         peerLabelInput.value = peer.label || '';
         peerUrlInput.value = peer.url || '';
         peerEnabledInput.checked = peer.enabled !== false;
-        peerEditorTitle.textContent = `Edit ${peer.label || peer.id || 'Peer'}`;
+        peerEditorTitle.textContent = `Edit ${peer.label || peer.id || 'Peer Hub'}`;
         savePeerBtn.textContent = 'Save Changes';
         setPeerSaveState(peer.hasToken ? 'Saved token will be kept if left blank' : 'Editing peer settings');
       } else {
-        peerEditorTitle.textContent = 'Add Peer';
-        savePeerBtn.textContent = 'Save Peer';
+        peerEditorTitle.textContent = 'Add Peer Hub';
+        savePeerBtn.textContent = 'Save Hub';
         setPeerSaveState('Add a peer manually, or close this editor and use discovery.');
       }
       peerForm.hidden = false;
@@ -4169,7 +4176,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           availableSounds = s.items || [];
           populateRuleSoundSelect();
           if (!s.items || s.items.length === 0) {
-            soundList.textContent = 'No chimes uploaded yet.';
+            soundList.textContent = 'No sounds uploaded yet.';
             return;
           }
           soundList.innerHTML = '';
@@ -4180,7 +4187,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             radio.type = 'radio';
             radio.name = 'activeSound';
             radio.value = item.path;
-            radio.title = 'Set this sound as the active chime';
+            radio.title = 'Set this as the active sound';
             radio.checked = (item.path === s.active);
             radio.addEventListener('change', () => {
               fetchAuth(`/setactive?path=${encodeURIComponent(item.path)}`)
@@ -4193,7 +4200,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             });
             const label = document.createElement('label');
             label.textContent = item.name || item.path;
-            label.title = item.path || item.name || 'Uploaded chime sound';
+            label.title = item.path || item.name || 'Uploaded sound file';
             const play = document.createElement('button');
             play.className = 'play-btn';
             play.title = 'Preview this sound';
