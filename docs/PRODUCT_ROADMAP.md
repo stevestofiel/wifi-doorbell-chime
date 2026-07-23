@@ -35,6 +35,8 @@ useful device.
   between Front and Shop.
 - [x] Peer editor progressive disclosure and explicit discovered/saved peer
   actions.
+- [x] `NoTiFi huB` product language and capability-based sensor naming
+  architecture documented.
 - [ ] Peer reachability diagnostics for IoT/client-isolation failures.
 - [ ] Per-sensor peer forwarding rules.
 - [ ] Peer log aggregation in the chime UI.
@@ -56,6 +58,18 @@ prepare remote sensor PCB decisions before ordering another chime PCB revision.
    calling either remote sensor hardware stable.
 6. Sketch the remote sensor PCB requirements, then decide whether to batch those
    boards with a Rev B chime PCB order.
+
+## Product Language Direction
+
+The primary device product identity is `NoTiFi huB`, with `Notification Hub`
+as its functional description and `hub` as the normal UI noun. Sensor product
+families should normally describe reusable capabilities rather than deployment
+locations; user labels and kits carry use-case language such as driveway,
+mailbox, or front door.
+
+See [NoTiFi Product Naming](PRODUCT_NAMING.md) for brand styling, candidate
+sensor families, UI vocabulary, and compatibility boundaries. Firmware and
+protocol identifiers remain unchanged until a separately reviewed migration.
 
 ## Product Variants
 
@@ -667,6 +681,9 @@ LoRa UI:
 
 ## Open Decisions
 
+- Final names for the capability-based NoTiFi sensor families.
+- Whether capacitive touch belongs to `NoTiFi buttoN` or a separate
+  `NoTiFi toucH` product.
 - Whether the first LoRa path uses UART AT-command modules or direct SPI radio
   modules after bench testing.
 - Exact range pod connector, pins, sealing, and detect behavior.
