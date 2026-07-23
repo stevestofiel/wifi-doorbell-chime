@@ -9,7 +9,8 @@ simple HTTP playback URLs.
 - WAV/MP3 chime library stored in SPIFFS
 - Stable sound-ID playback URLs for automations
 - Captive portal provisioning with WiFiManager
-- Editable device label for mDNS, such as `doorbell-front.local`
+- Editable device label for local hostnames such as `doorbell-front` and mDNS
+  addresses such as `doorbell-front.local`
 - Advanced LAN DNS suffix option for webhook-friendly names
 - Wi-Fi reconnect watchdog for temporary network outages
 - Optional LAN admin password for management actions
@@ -67,10 +68,14 @@ Development uploads preserve saved Wi-Fi, sounds, and settings when flash is not
 erased.
 
 The device advertises a DHCP hostname based on its label, such as
-`doorbell-front`. The Manage page also includes an advanced LAN DNS option for
-systems such as UniFi Protect that may not resolve mDNS `.local` names. LAN DNS
-is off by default because your router or local DNS server must resolve that name
-for it to work.
+`doorbell-front`. This bare local hostname is the preferred human-friendly
+choice for webhook systems such as UniFi Protect when the router resolves DHCP
+hostnames. The `.local` form is an mDNS address and is shown separately because
+not every webhook client supports mDNS. A reserved IP remains the fallback.
+
+The Manage page keeps custom `.lan`, `.home.arpa`, and other configured suffixes
+under Advanced DNS because those names work only when the router or local DNS
+server is explicitly configured to resolve them.
 
 ## HTTP Endpoints
 
