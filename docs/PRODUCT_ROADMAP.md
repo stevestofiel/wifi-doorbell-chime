@@ -45,6 +45,8 @@ useful device.
 - [x] Human-friendly hub hostname and peer connection identity UI.
 - [x] `NoTiFi huB` product language and capability-based sensor naming
   architecture documented.
+- [x] `NoTiFi huB` firmware UI terminology applied without changing legacy
+  routes, discovery identifiers, saved keys, or hostnames.
 - [ ] Peer reachability diagnostics for IoT/client-isolation failures.
 - [ ] Per-sensor peer forwarding rules.
 - [ ] Peer log aggregation in the chime UI.
