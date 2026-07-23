@@ -31,6 +31,8 @@ useful device.
 - [x] Peer chime list and manual peer test action.
 - [x] First-pass peer forwarding control for forwarding owner-chime sensor
   triggers to enabled peers.
+- [x] Bidirectional peer forwarding and relay-loop prevention bench validated
+  between Front and Shop.
 - [x] Peer editor progressive disclosure and explicit discovered/saved peer
   actions.
 - [ ] Peer reachability diagnostics for IoT/client-isolation failures.
