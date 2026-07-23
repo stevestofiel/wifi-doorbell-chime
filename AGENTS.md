@@ -19,6 +19,22 @@ Treat both firmware and hardware documentation as product source, not examples.
   bench tests, wiring checks, upload tests, serial-log checks, and enclosure
   tests that Codex cannot perform.
 
+## Workflow Control Words
+
+Treat these user terms as explicit stopping points:
+
+- `implement`: edit, compile, and test, but do not commit.
+- `checkpoint`: create a focused local commit, but do not push.
+- `publish`: push the current focused branch and open a draft pull request.
+- `ready`: mark the current draft pull request ready for review.
+- `merge`: merge the current pull request, switch to `main`, and fast-forward
+  the local checkout to `origin/main`.
+- `local only`: do not make GitHub, network-device, or other external writes.
+
+Without one of these terms, implement and validate the requested change, then
+stop at the safest natural checkpoint. Never infer `ready` or `merge` from
+general approval such as “looks good.”
+
 ## Branch And Commit Discipline
 
 - Use `codex/` branch names by default.
@@ -70,23 +86,27 @@ When a change affects hardware behavior, explicitly ask the user to verify:
 
 - Assume the chime and one or more sensor boards may be connected at the same
   time.
-- Before uploading, identify the intended board and port. Start with
-  `arduino-cli board list`.
+- For registered hardware, start with `scripts/device.sh list` and upload with
+  `scripts/device.sh upload <device>`. The registry matches stable USB hardware
+  IDs and must refuse to guess.
+- Use `arduino-cli board list` directly only when diagnosing or registering new
+  hardware.
 - If multiple ESP32 boards are present, distinguish them by serial output,
   firmware strings, MAC address, or another concrete signal before uploading.
 - Never guess the port when the chime and a sensor are both connected.
+- Treat `scripts/device.sh trigger <device>` as an audible external action.
+  Run it only when the user has requested or is actively expecting a bench
+  trigger.
 
 ## Arduino Commands
 
-- Compile chime firmware with its 2 MB app partition:
-  `arduino-cli compile --fqbn esp32:esp32:esp32s3:PartitionScheme=no_ota .`
-- Upload chime firmware with the same partition profile:
-  `arduino-cli upload -p <chime-port> --fqbn esp32:esp32:esp32s3:PartitionScheme=no_ota .`
-- Compile Wi-Fi button/touch sensor firmware:
-  `arduino-cli compile --fqbn esp32:esp32:esp32s3 sensors/wifi_button_touch`
-- Upload Wi-Fi button/touch sensor firmware:
-  `arduino-cli upload -p <sensor-port> --fqbn esp32:esp32:esp32s3 sensors/wifi_button_touch`
-- Compile Wi-Fi radar sensor firmware:
-  `arduino-cli compile --fqbn esp32:esp32:esp32s3 sensors/wifi_radar`
-- Upload Wi-Fi radar sensor firmware:
-  `arduino-cli upload -p <sensor-port> --fqbn esp32:esp32:esp32s3 sensors/wifi_radar`
+- Compile into the workspace-local `.arduino/` build cache:
+  - Chime/hub: `scripts/compile.sh chime`
+  - Button/touch sensor: `scripts/compile.sh wifi_button_touch`
+  - Radar sensor: `scripts/compile.sh wifi_radar`
+  - Everything: `scripts/compile.sh all`
+- Upload registered hardware by stable identity:
+  `scripts/device.sh upload <device>`.
+- Use the underlying `arduino-cli` commands only for unregistered hardware or
+  diagnostics. Preserve the chime's
+  `esp32:esp32:esp32s3:PartitionScheme=no_ota` profile.

@@ -12,9 +12,12 @@ Commands:
   list              List detected ESP32 USB devices and known labels.
   port <device>     Print the current serial port for a known device.
   upload <device>   Compile and upload firmware to a known device.
+  status <device>   Fetch the status JSON for a known network device.
+  trigger <device>  Send one audible doorbell.press bench event.
 
 Known devices are configured in devices.json by stable Espressif USB
-hardware_id, not by changing /dev/cu.usbmodem* port names.
+hardware_id, not by changing /dev/cu.usbmodem* port names. Network commands
+use the saved URL and do not require the device to be connected over USB.
 USAGE
 }
 
@@ -23,6 +26,9 @@ python_device() {
 import json
 import subprocess
 import sys
+import time
+import urllib.parse
+import urllib.request
 from pathlib import Path
 
 root = Path(sys.argv[1])
@@ -63,11 +69,15 @@ for item in detected:
         "label": known_by_id.get(hardware_id, ""),
     })
 
-def find_device(name):
+def get_device(name):
     if name not in registry:
         known = ", ".join(sorted(registry)) or "(none)"
         raise SystemExit(f"Unknown device '{name}'. Known devices: {known}")
-    expected = registry[name].get("hardware_id", "").upper()
+    return registry[name]
+
+def find_device(name):
+    info = get_device(name)
+    expected = info.get("hardware_id", "").upper()
     matches = [p for p in esp_ports if p["hardware_id"] == expected]
     if not matches:
         print(f"Device '{name}' is not connected.")
@@ -80,7 +90,14 @@ def find_device(name):
         raise SystemExit(1)
     if len(matches) > 1:
         raise SystemExit(f"Multiple ports matched '{name}', refusing to guess.")
-    return registry[name], matches[0]
+    return info, matches[0]
+
+def device_url(name):
+    info = get_device(name)
+    url = info.get("url", "").strip().rstrip("/")
+    if not url:
+        raise SystemExit(f"Device '{name}' does not have a network URL.")
+    return url
 
 if command == "list":
     if not esp_ports:
@@ -116,6 +133,24 @@ elif command == "upload":
         match["address"],
         str(root / info["sketch"]),
     ], cwd=root)
+elif command == "status":
+    url = device_url(device_name) + "/status"
+    with urllib.request.urlopen(url, timeout=5) as response:
+        print(response.read().decode("utf-8"))
+elif command == "trigger":
+    event_id = f"codex-{device_name}-{int(time.time() * 1000)}"
+    query = urllib.parse.urlencode({
+        "sensor": "codex-bench",
+        "type": "doorbell",
+        "event": "press",
+        "eventId": event_id,
+        "input": "service",
+        "gain": "1.0",
+    })
+    url = device_url(device_name) + "/trigger?" + query
+    print(f"Sending audible test to {device_name}: {event_id}")
+    with urllib.request.urlopen(url, timeout=8) as response:
+        print(response.read().decode("utf-8"))
 else:
     raise SystemExit(f"Unknown command '{command}'")
 PY
@@ -128,7 +163,7 @@ case "${command}" in
   list)
     python_device "${ROOT_DIR}" "${DEVICES_FILE}" list
     ;;
-  port|upload)
+  port|upload|status|trigger)
     if [[ -z "${device}" ]]; then
       usage >&2
       exit 2
