@@ -35,6 +35,8 @@ useful device.
   between Front and Shop.
 - [x] Peer editor progressive disclosure and explicit discovered/saved peer
   actions.
+- [x] `NoTiFi huB` product language and capability-based sensor naming
+  architecture documented.
 - [ ] Peer reachability diagnostics for IoT/client-isolation failures.
 - [ ] Per-sensor peer forwarding rules.
 - [ ] Peer log aggregation in the chime UI.
@@ -52,10 +54,22 @@ prepare remote sensor PCB decisions before ordering another chime PCB revision.
 3. Verify touch input behavior and false-trigger resistance at the intended
    mounting location.
 4. Mount-test the RCWL radar and tune cooldown/settle timing if needed.
-5. Confirm battery, enclosure, reset-button, and service-button access before
-   calling either remote sensor hardware stable.
+5. Confirm battery, enclosure, reset-button, service-button, and gain-control
+   access before calling either remote sensor hardware stable.
 6. Sketch the remote sensor PCB requirements, then decide whether to batch those
    boards with a Rev B chime PCB order.
+
+## Product Language Direction
+
+The primary device product identity is `NoTiFi huB`, with `Notification Hub`
+as its functional description and `hub` as the normal UI noun. Sensor product
+families should normally describe reusable capabilities rather than deployment
+locations; user labels and kits carry use-case language such as driveway,
+mailbox, or front door.
+
+See [NoTiFi Product Naming](PRODUCT_NAMING.md) for brand styling, candidate
+sensor families, UI vocabulary, and compatibility boundaries. Firmware and
+protocol identifiers remain unchanged until a separately reviewed migration.
 
 ## Product Variants
 
@@ -278,12 +292,12 @@ Example cases:
 
 ## Event Gain And Sensor Volume Controls
 
-Remote sensors may eventually include a small set-and-forget gain control, such
-as a board-mounted trim potentiometer, to tune how loudly that sensor's events
-play relative to other events. This is especially useful when two sensors should
-use different sound prominence without changing the receiver's master volume.
-For compact remote sensors, this should be an installer/service adjustment
-rather than a prominent user-facing knob.
+Every remote sensor should include a physically accessible event-gain control,
+such as a compact potentiometer, to tune how loudly that sensor's events play
+relative to other events. This is especially useful when two sensors should use
+different sound prominence without changing the receiver's master volume. The
+control may be low profile, but it should remain reachable to the user after
+installation.
 
 Recommended behavior:
 
@@ -317,9 +331,12 @@ Implementation notes:
 - If installers need finer control, expose optional per-sensor min/max or
   inverted-direction calibration on the chime. Keep sensor-side defaults simple
   enough that a trim pot works without calibration.
-- Physical gain controls are a product feature, not a required part of the
-  first remote sensor hardware milestone. Prefer low-profile internal trim
-  controls unless a specific kit genuinely needs an external dial.
+- Keep the shared gain control's meaning consistent across sensor families.
+  Sensor-specific light, tilt, range, or similar thresholds should use a clear
+  teach/calibration gesture or a separate product-specific trim rather than
+  silently repurposing the event-gain control.
+- Treat physical gain-control access as a required remote-sensor hardware
+  milestone alongside service-button access.
 
 ## Sensor Configuration
 
@@ -645,8 +662,8 @@ LoRa UI:
 - Add a reference Wi-Fi sensor sketch or separate firmware package.
 - Support sensor ID, type, event, target URLs, and optional token.
 - Support fan-out to multiple chimes.
-- Optionally prototype ADC-based sensor event gain from a low-profile trim pot
-  after the required setup/test/service button behavior is stable.
+- Standardize ADC-based sensor event gain from a physically accessible
+  potentiometer after the required setup/test/service button behavior is stable.
 
 ### Phase 7: LoRa Gateway Chime
 
@@ -667,6 +684,9 @@ LoRa UI:
 
 ## Open Decisions
 
+- Final names for the capability-based NoTiFi sensor families.
+- Exact accent colors for Wi-Fi and LoRa-capable `NoTiFi huB` variants, plus
+  any sensor-family color system.
 - Whether the first LoRa path uses UART AT-command modules or direct SPI radio
   modules after bench testing.
 - Exact range pod connector, pins, sealing, and detect behavior.
@@ -680,3 +700,5 @@ LoRa UI:
   versus chime master volume.
 - Whether per-sensor gain calibration belongs in the first rule editor update
   or a later installer/service UI pass.
+- Exact service-button teach/calibration gestures and which sensor types, if
+  any, require a separate physical threshold trim.

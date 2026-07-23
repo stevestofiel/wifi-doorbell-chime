@@ -41,11 +41,16 @@ Treat both firmware and hardware documentation as product source, not examples.
 ## Remote Sensor Hardware Assumptions
 
 - Every remote sensor should include a required setup/test/service button.
+- Every remote sensor should include a physically reachable user event-gain
+  potentiometer.
 - Default service button wiring: `GPIO3` to momentary button to `GND`, using
   `INPUT_PULLUP`.
 - Boot hold should clear saved Wi-Fi/sensor settings and start the captive
   portal.
 - Short press while running should send a test event.
+- Keep the shared gain potentiometer's meaning consistent across sensor
+  products. Use a service-button teach/calibration gesture or a separate
+  product-specific trim for light, tilt, range, or similar thresholds.
 - Battery-powered sensors should keep this button physically reachable and
   eventually use a wake-capable pin for sleep designs.
 
@@ -57,7 +62,9 @@ When a change affects hardware behavior, explicitly ask the user to verify:
 - Serial logs for startup, setup gesture, input changes, and HTTP status.
 - Chime event log entries after sensor triggers.
 - False-trigger behavior at the intended mounting location.
-- Battery, enclosure, and reset-button access before calling hardware stable.
+- Battery, enclosure, reset-button, service-button, and gain-control access
+  before calling hardware stable.
+- Product-specific threshold calibration and repeatability where applicable.
 
 ## Upload Discipline
 
