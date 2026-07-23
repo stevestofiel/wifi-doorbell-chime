@@ -44,6 +44,39 @@ The enclosure photos show a round front grille, internal speaker mounted near
 the front opening, a prototype board behind it, and a USB-C cable routed toward
 the rear/top opening for power and programming.
 
+## Rev A Chime PCB Validation
+
+The first custom chime PCB is electrically functional when the ESP32-S3 Super
+Mini is raised above the carrier board with taller socket/header clearance.
+
+Observed results:
+
+- The second chime node booted, played the startup sound, joined Wi-Fi, accepted
+  a sound upload, played the uploaded sound, and ran in the enclosure from a wall
+  outlet.
+- The MAX98357A audio path, speaker wiring, ESP32 socket wiring, and SPIFFS
+  storage partition all behaved correctly during bench testing.
+- Low-profile ESP32 socket/header placement caused the setup access point to be
+  difficult or impossible to see even though firmware was running.
+- Removing a large physical section of PCB/copper near the ESP32 did not fix the
+  Wi-Fi issue by itself.
+- Taller ESP32 socket/header clearance restored strong Wi-Fi signal in the
+  assembled unit and did not create enclosure fit or clearance problems.
+
+For future PCB revisions or assembly instructions:
+
+- Specify the taller ESP32 socket/header stack that was validated in the
+  enclosure.
+- Keep the ESP32 antenna region free of copper, metal, and nearby hardware where
+  practical, but treat module height/clearance as the proven Rev A fix.
+- Keep useful ground copper near the MAX98357A audio section unless testing
+  shows a reason to remove it.
+- If using 8-pin sockets because the ninth ESP32 pins are unused, document the
+  orientation clearly. A full footprint remains preferable for mechanical keying
+  and assembly confidence.
+- Re-test Wi-Fi signal, captive portal visibility, sound upload, playback, and
+  enclosure fit before ordering another PCB revision.
+
 ## Notes For Next Revision
 
 - Add a labeled internal photo after final soldering.
@@ -51,3 +84,5 @@ the rear/top opening for power and programming.
 - Add a strain-relief detail for the short USB-C cable.
 - Add a physical admin-password recovery gesture if the button placement allows
   a reliable boot-time hold.
+- Batch any Rev B chime PCB order with the remote sensor PCB order if the chime
+  board is still functioning well with the taller ESP32 socket/header.

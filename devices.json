@@ -1,0 +1,10 @@
+{
+  "devices": {
+    "radar": {
+      "role": "wifi_radar",
+      "hardware_id": "A0:F2:62:F3:DE:3C",
+      "fqbn": "esp32:esp32:esp32s3:CDCOnBoot=cdc",
+      "sketch": "sensors/wifi_radar"
+    }
+  }
+}

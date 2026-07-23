@@ -21,7 +21,24 @@ public:
     unsigned long now = millis();
     if (now - lastTriggerMs < cooldownMs) return;
     lastTriggerMs = now;
+    sendRequest(source, now);
+  }
 
+  void sendNow(const char* source) {
+    unsigned long now = millis();
+    sendRequest(source, now);
+  }
+
+private:
+  const SensorConfigManager& configManager;
+  unsigned long cooldownMs;
+  unsigned long lastTriggerMs = 0;
+  uint32_t eventCounter = 0;
+  GainProvider gainProvider = nullptr;
+
+  static constexpr unsigned long WIFI_CONNECT_TIMEOUT_MS = 15000;
+
+  void sendRequest(const char* source, unsigned long now) {
     Serial.printf("Trigger: %s\n", source);
     if (!ensureWiFi()) return;
     if (!configManager.hasRequiredConfig()) {
@@ -54,15 +71,6 @@ public:
       httpGet(withToken(config.chimeBaseUrl + "/chime"));
     }
   }
-
-private:
-  const SensorConfigManager& configManager;
-  unsigned long cooldownMs;
-  unsigned long lastTriggerMs = 0;
-  uint32_t eventCounter = 0;
-  GainProvider gainProvider = nullptr;
-
-  static constexpr unsigned long WIFI_CONNECT_TIMEOUT_MS = 15000;
 
   String makeEventId(unsigned long now) {
     String id = WiFi.macAddress();

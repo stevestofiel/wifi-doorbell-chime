@@ -25,6 +25,9 @@ useful device.
 - [x] Sensor-to-sound rule backend.
 - [x] Sensor-to-sound rule editor UI.
 - [x] Embedded sound budget/spec documented.
+- [x] Wi-Fi radar service button, gain trim, and RCWL motion bench validated.
+- [x] Second chime node assembled on Rev A PCB and validated in enclosure with
+  taller ESP32 socket/header clearance.
 - [ ] Peer chime configuration.
 - [ ] Peer log aggregation in the chime UI.
 - [ ] MQTT event publishing.
@@ -33,13 +36,18 @@ useful device.
 
 ## Next Session Plan
 
-Focus: physically validate the shared remote sensor setup/test/service button.
+Focus: finish remote sensor physical validation, tune radar deployment, and
+prepare remote sensor PCB decisions before ordering another chime PCB revision.
 
 1. Upload the button/touch firmware and verify boot-hold setup reset.
 2. Verify short-press sends a `doorbell.press` event.
-3. Upload the radar firmware and verify boot-hold setup reset.
-4. Verify radar service-button short-press sends a test `motion.detected` event.
-5. Verify RCWL radar motion sends `motion.detected` and tune cooldown if needed.
+3. Verify touch input behavior and false-trigger resistance at the intended
+   mounting location.
+4. Mount-test the RCWL radar and tune cooldown/settle timing if needed.
+5. Confirm battery, enclosure, reset-button, and service-button access before
+   calling either remote sensor hardware stable.
+6. Sketch the remote sensor PCB requirements, then decide whether to batch those
+   boards with a Rev B chime PCB order.
 
 ## Product Variants
 
@@ -388,10 +396,14 @@ Consensus model:
 - Each chime is standalone and useful by itself.
 - Multiple chimes form a peer group.
 - Sensors send semantic events rather than sound-file assumptions.
+- A sensor has one owner chime. The owner chime enrolled/configured the sensor
+  and is the sensor's normal HTTP target.
 - Each chime decides locally whether to play, stay silent, log, indicate, or
   relay an event.
 - Each chime stores its own recent event log.
-- Any chime UI may fetch peer logs and merge them into a whole-property view.
+- Event logs stay local-first. A future helper app or troubleshooting view may
+  poll all chimes, and possibly awake/configurable sensors, to build a merged
+  diagnostic view.
 - Event IDs should prevent duplicate playback, relay loops, and duplicate log
   rows.
 - MQTT, Home Assistant, Docker dashboards, and similar systems are optional
@@ -414,8 +426,11 @@ Routing scopes:
 
 Recommended first implementation:
 
-- Sensors can fan out directly to multiple chime URLs.
-- Each chime applies its own local sound rules.
+- Sensors send direct events to one owner chime.
+- The owner chime supports simple per-sensor forwarding: all peers or none.
+- Receiving peer chimes can play forwarded events using built-in defaults.
+- Forwarded unknown sensors need more product/security thought before custom
+  sound behavior is assumed.
 - No dependency on a primary controller.
 
 Later implementation:
@@ -424,6 +439,15 @@ Later implementation:
 - A LoRa gateway chime or selected Wi-Fi chime can relay events to peers.
 - Relayed events must include loop prevention, such as `relay=0`, a hop count,
   or a dedupe event ID.
+- Sensor ownership transfer can move a sensor from one owner chime to another
+  without factory-resetting the sensor.
+- Owner-chime outage fallback needs a future design. Do not require fallback for
+  the first peer-relay implementation.
+- Group forwarding and named peer routing need more design before replacing the
+  first all-or-none forwarding control.
+- A peer chime should not create a full local override for a forwarded sensor in
+  the first design. It may still enforce local safety limits, such as maximum
+  playback gain/volume, quiet behavior, or disabled playback.
 
 ## Peer Chime Configuration
 
