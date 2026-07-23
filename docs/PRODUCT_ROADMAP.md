@@ -28,7 +28,15 @@ useful device.
 - [x] Wi-Fi radar service button, gain trim, and RCWL motion bench validated.
 - [x] Second chime node assembled on Rev A PCB and validated in enclosure with
   taller ESP32 socket/header clearance.
-- [ ] Peer chime configuration.
+- [x] Peer chime list and manual peer test action.
+- [x] First-pass peer forwarding control for forwarding owner-chime sensor
+  triggers to enabled peers.
+- [x] Bidirectional peer forwarding and relay-loop prevention bench validated
+  between Front and Shop.
+- [x] Peer editor progressive disclosure and explicit discovered/saved peer
+  actions.
+- [ ] Peer reachability diagnostics for IoT/client-isolation failures.
+- [ ] Per-sensor peer forwarding rules.
 - [ ] Peer log aggregation in the chime UI.
 - [ ] MQTT event publishing.
 - [ ] LoRa gateway prototype.
@@ -428,6 +436,12 @@ Recommended first implementation:
 
 - Sensors send direct events to one owner chime.
 - The owner chime supports simple per-sensor forwarding: all peers or none.
+- Chimes discover peers through `_doorbell-chime._tcp` mDNS and keep a short
+  live cache of discovered chimes.
+- Chimes also use a small local UDP discovery probe as a practical fallback when
+  ESP32-side mDNS service queries are unreliable on the LAN.
+- Saved peer configuration is an override layer for discovered chimes, not the
+  only source of peer knowledge.
 - Receiving peer chimes can play forwarded events using built-in defaults.
 - Forwarded unknown sensors need more product/security thought before custom
   sound behavior is assumed.
@@ -435,7 +449,6 @@ Recommended first implementation:
 
 Later implementation:
 
-- Chimes can maintain a peer list.
 - A LoRa gateway chime or selected Wi-Fi chime can relay events to peers.
 - Relayed events must include loop prevention, such as `relay=0`, a hop count,
   or a dedupe event ID.
@@ -451,8 +464,8 @@ Later implementation:
 
 ## Peer Chime Configuration
 
-Store peer chime configuration separately from sound files, likely in
-`/peers.json`.
+Discovered peer chimes should come from mDNS. Store optional peer overrides
+separately from sound files, likely in `/peers.json`.
 
 Example shape:
 
@@ -479,6 +492,9 @@ Example shape:
 
 Peer relay should use the same `/trigger` endpoint so the receiving chime can
 apply its own rules.
+
+The Manage UI should show discovered peers as online. Saved peers that have not
+been discovered recently should remain visible but appear offline or dimmed.
 
 ## LoRa Gateway Considerations
 
