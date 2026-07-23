@@ -1,10 +1,10 @@
 <!-- SPDX-License-Identifier: MIT -->
 
-# Wi-Fi Button/Touch Sensor Firmware
+# Wi-Fi Touch Sensor Firmware
 
-Firmware for an ESP32 Super Mini-style board used as a remote chime
-sensor. The first bench board was labeled like a C3 variant, but uploaded as an
-ESP32-S3.
+Firmware for the capacitive-touch `NoTiFi toucH` direction on an ESP32 Super
+Mini-style board. The first bench board was labeled like a C3 variant, but
+uploaded as an ESP32-S3.
 
 ## Structure
 
@@ -14,9 +14,9 @@ This sensor firmware is split so future sensor types can reuse the same base beh
   and setup-reset behavior.
 - `../common/SensorButton.h`: required setup/test/service button behavior.
 - `../common/TriggerClient.h`: Wi-Fi reconnect and HTTP `/trigger` calls.
-- `ButtonTouchDriver.h`: capacitive touch input handling.
-- `wifi_button_touch.ino`: wires the config manager, trigger client, and
-  selected driver together.
+- `TouchDriver.h`: capacitive touch input handling.
+- `wifi_touch.ino`: wires the config manager, trigger client, and selected
+  driver together.
 
 Additional sensors, such as reed switches, radar/motion modules, or ultrasonic
 distance modules, should add a small driver with the same pattern rather than
@@ -87,11 +87,11 @@ http://192.168.1.42
 If a full endpoint such as `/trigger` or `/chime` is pasted, the sketch trims it
 back to the chime base URL before saving.
 
-The sketch calls `/trigger` with a semantic event when the service button is
-pressed or the touch input is held:
+The sketch calls `/trigger` with the configured semantic event when the service
+button is pressed or the touch input is held. Its touch-specific defaults are:
 
 ```text
-/trigger?sensor=bench-button&type=doorbell&event=press&eventId=<sensor-generated-id>&gain=<trim-value>
+/trigger?sensor=bench-touch&type=touch&event=activated&eventId=<sensor-generated-id>&gain=<trim-value>
 ```
 
 The `eventId` is generated from the sensor MAC address, a local counter, and

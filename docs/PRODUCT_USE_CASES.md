@@ -206,7 +206,7 @@ volume setting.
 High-priority physical sensors:
 
 - Wireless doorbell button.
-- Button/touch sensor.
+- Touch sensor.
 - Door/window contact.
 - Mailbox open sensor.
 - Gate open sensor.
@@ -229,7 +229,7 @@ Later or specialized sensors:
 ### Wireless Doorbell Kit
 
 - Wi-Fi chime.
-- Wireless button/touch sensor.
+- Wireless touch sensor.
 - Default doorbell sound.
 - Optional uploaded sounds.
 

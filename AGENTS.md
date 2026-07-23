@@ -102,7 +102,7 @@ When a change affects hardware behavior, explicitly ask the user to verify:
 
 - Compile into the workspace-local `.arduino/` build cache:
   - Chime/hub: `scripts/compile.sh chime`
-  - Button/touch sensor: `scripts/compile.sh wifi_button_touch`
+  - Touch sensor: `scripts/compile.sh wifi_touch`
   - Radar sensor: `scripts/compile.sh wifi_radar`
   - Everything: `scripts/compile.sh all`
 - Upload registered hardware by stable identity:

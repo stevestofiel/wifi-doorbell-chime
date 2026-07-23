@@ -4,7 +4,7 @@
 
 Firmware for an ESP32-S3 Super Mini-style board connected to an
 RCWL-0516 microwave radar motion module. It reuses the shared Wi-Fi setup and
-HTTP `/trigger` client used by the button/touch prototype.
+HTTP `/trigger` client used by the touch prototype.
 
 ## Prototype Goal
 

@@ -113,8 +113,8 @@ elif command == "upload":
     compile_target = info.get("role", device_name)
     if compile_target == "wifi_radar":
         build_dir = root / ".arduino" / "build" / "wifi_radar"
-    elif compile_target == "wifi_button_touch":
-        build_dir = root / ".arduino" / "build" / "wifi_button_touch"
+    elif compile_target == "wifi_touch":
+        build_dir = root / ".arduino" / "build" / "wifi_touch"
     elif compile_target == "chime":
         build_dir = root / ".arduino" / "build" / "chime"
     else:

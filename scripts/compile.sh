@@ -11,11 +11,11 @@ compile_chime() {
     "${ROOT_DIR}"
 }
 
-compile_wifi_button_touch() {
+compile_wifi_touch() {
   arduino-cli compile \
-    --build-path "${ARDUINO_DIR}/build/wifi_button_touch" \
+    --build-path "${ARDUINO_DIR}/build/wifi_touch" \
     --fqbn esp32:esp32:esp32s3:CDCOnBoot=cdc \
-    "${ROOT_DIR}/sensors/wifi_button_touch"
+    "${ROOT_DIR}/sensors/wifi_touch"
 }
 
 compile_wifi_radar() {
@@ -31,7 +31,7 @@ Usage: scripts/compile.sh <target>
 
 Targets:
   chime
-  wifi_button_touch
+  wifi_touch
   wifi_radar
   all
 USAGE
@@ -45,15 +45,15 @@ case "${target}" in
   chime)
     compile_chime
     ;;
-  wifi_button_touch)
-    compile_wifi_button_touch
+  wifi_touch)
+    compile_wifi_touch
     ;;
   wifi_radar)
     compile_wifi_radar
     ;;
   all)
     compile_chime
-    compile_wifi_button_touch
+    compile_wifi_touch
     compile_wifi_radar
     ;;
   *)
