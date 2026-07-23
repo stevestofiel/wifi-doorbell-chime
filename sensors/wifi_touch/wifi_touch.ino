@@ -2,7 +2,7 @@
 // Wi-Fi remote sensor prototype for ESP32 Super Mini-style boards.
 
 #include <Arduino.h>
-#include "ButtonTouchDriver.h"
+#include "TouchDriver.h"
 #include "../common/SensorButton.h"
 #include "../common/SensorConfig.h"
 #include "../common/SensorGainTrim.h"
@@ -26,7 +26,7 @@ const unsigned long DEBOUNCE_MS = 40;
 const unsigned long TOUCH_HOLD_MS = 180;
 const unsigned long SETUP_HOLD_MS = 2000;
 
-SensorConfigManager configManager;
+SensorConfigManager configManager("bench-touch", "touch", "activated");
 SensorGainTrim gainTrim(GAIN_TRIM_PIN);
 
 float readEventGain() {
@@ -49,7 +49,7 @@ SensorButton serviceButton(
   emitSensorEvent
 );
 
-ButtonTouchDriver driver(
+TouchDriver driver(
   TOUCH_PIN,
   TOUCH_ACTIVE_LEVEL,
   TOUCH_HOLD_MS,
@@ -66,7 +66,7 @@ void setup() {
   gainTrim.begin();
 
   Serial.println();
-  Serial.println("Wi-Fi sensor prototype starting");
+  Serial.println("Wi-Fi touch sensor starting");
   Serial.printf("Service button GPIO: %d\n", BUTTON_PIN);
   Serial.printf("Touch GPIO: %d\n", TOUCH_PIN);
   Serial.printf("Gain trim ADC GPIO: %d\n", GAIN_TRIM_PIN);

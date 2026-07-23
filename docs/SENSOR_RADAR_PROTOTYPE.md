@@ -35,7 +35,7 @@ sensor=bench-radar&type=motion&event=detected
 ## Mini Breadboard Layout
 
 Use a mini breadboard as a temporary carrier, not a final mechanical design.
-Keep the current button/touch prototype intact as the known-good control.
+Keep the current touch prototype intact as the known-good control.
 
 Recommended layout:
 

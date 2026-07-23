@@ -12,7 +12,7 @@ useful device.
 - [x] Remote sensor and multi-chime roadmap documented.
 - [x] Minimal chime `/trigger` endpoint.
 - [x] Chime `_doorbell-chime._tcp` mDNS service advertisement.
-- [x] Wi-Fi sensor button/touch prototype.
+- [x] Wi-Fi touch sensor prototype.
 - [x] Sensor captive portal setup.
 - [x] Sensor reset/setup gesture.
 - [x] Sensor base firmware and driver refactor.
@@ -37,7 +37,7 @@ useful device.
 - [x] Manage preview rapid-playback stability bench validated on Shop.
 - [x] Front cold-boot first-playback retest completed without reproducing the
   earlier transient stutter.
-- [x] Wi-Fi button/touch boot-hold reset, same-boot setup portal, Shop
+- [x] Wi-Fi touch sensor boot-hold reset, same-boot setup portal, Shop
   targeting, service-button and touch triggers, peer forwarding, event logging,
   and initial false-trigger resistance bench validated.
 - [x] Peer editor progressive disclosure and explicit discovered/saved peer
@@ -123,7 +123,7 @@ Common base firmware responsibilities:
 
 Sensor-specific behavior should live in small driver modules:
 
-- Button/touch driver.
+- Touch driver.
 - Reed switch driver.
 - Motion driver.
 - Ultrasonic distance driver.

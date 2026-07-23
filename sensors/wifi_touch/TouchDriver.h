@@ -6,13 +6,13 @@
 
 using SensorEmitFn = void (*)(const char* source);
 
-class ButtonTouchDriver {
+class TouchDriver {
 public:
-  ButtonTouchDriver(int touchPin,
-                    int touchActiveLevel,
-                    unsigned long touchHoldMs,
-                    SensorEmitFn emit,
-                    bool emitOnStableChange = false)
+  TouchDriver(int touchPin,
+              int touchActiveLevel,
+              unsigned long touchHoldMs,
+              SensorEmitFn emit,
+              bool emitOnStableChange = false)
     : touchPin(touchPin),
       touchActiveLevel(touchActiveLevel),
       touchHoldMs(touchHoldMs),
