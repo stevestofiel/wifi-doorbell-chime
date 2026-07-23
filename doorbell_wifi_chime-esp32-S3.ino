@@ -2702,7 +2702,11 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     .rule-save-state {min-height:1rem; font-size:0.78rem; color:var(--text-light);}
     .rule-save-state.error {color:#fb7185;}
     .rule-save-state.ok {color:#86efac;}
-    .peer-form {display:grid; gap:0.55rem; margin-bottom:0.85rem;}
+    .peer-form {display:grid; gap:0.55rem; margin:0.85rem 0; padding:0.75rem; border:1px solid rgba(143,160,179,0.16); border-radius:10px; background:rgba(4,9,16,0.2);}
+    .peer-form[hidden] {display:none;}
+    .peer-editor-heading {display:flex; justify-content:space-between; align-items:center; gap:0.5rem;}
+    .peer-editor-heading h3 {margin:0; color:#d8e2ee; font-size:0.95rem;}
+    .peer-editor-heading button {width:auto; min-width:auto; margin:0; padding:0.4rem 0.65rem; font-size:0.8rem; line-height:1.1; border-radius:8px;}
     .peer-row {display:grid; grid-template-columns:minmax(0, 0.8fr) minmax(0, 1.2fr); gap:0.45rem;}
     .peer-field {display:grid; gap:0.25rem;}
     .peer-field label {color:var(--text-light); font-size:0.76rem; font-weight:600;}
@@ -2715,7 +2719,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       padding:0.48rem 0.55rem;
       font-size:0.86rem;
     }
-    .peer-actions {display:grid; grid-template-columns:1fr auto; gap:0.45rem; align-items:center;}
+    .peer-actions {display:flex; justify-content:flex-end; gap:0.45rem; align-items:center;}
     .peer-actions button {width:auto; min-width:auto; margin:0; padding:0.55rem 0.8rem; font-size:0.85rem; line-height:1.1; border-radius:8px;}
     .peer-enabled-row {
       align-self:end;
@@ -2737,11 +2741,13 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       font-weight:600;
     }
     .peer-forward-row input {width:auto;}
+    .peer-toolbar {justify-content:space-between; align-items:center; gap:0.6rem; flex-wrap:wrap;}
+    .peer-toolbar-buttons {display:flex; gap:0.45rem; margin-left:auto;}
     .peer-list {display:grid; gap:0.45rem;}
     .peer-empty {color:var(--text-light); font-size:0.9rem;}
     .peer-item {
       display:grid;
-      grid-template-columns:minmax(0, 1fr) auto auto auto;
+      grid-template-columns:minmax(0, 1fr) repeat(4, auto);
       gap:0.2rem 0.5rem;
       padding:0.65rem 0;
       border-bottom:1px solid rgba(143,160,179,0.14);
@@ -2751,6 +2757,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     .peer-meta {grid-column:1 / -1; color:var(--text-light); font-size:0.78rem; overflow-wrap:anywhere;}
     .peer-test,
     .peer-edit,
+    .peer-toggle,
     .peer-delete {
       width:auto;
       height:30px;
@@ -2950,8 +2957,17 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       .security-row,
       .rules-row,
       .rules-actions,
-      .peer-row,
-      .peer-actions {display:grid; grid-template-columns:1fr; gap:0.5rem;}
+      .peer-row {display:grid; grid-template-columns:1fr; gap:0.5rem;}
+      .peer-toolbar {align-items:stretch;}
+      .peer-toolbar-buttons {width:100%; margin-left:0;}
+      .peer-toolbar-buttons button {flex:1;}
+      .peer-item {grid-template-columns:repeat(4, minmax(0, 1fr));}
+      .peer-main,
+      .peer-meta {grid-column:1 / -1;}
+      .peer-test,
+      .peer-edit,
+      .peer-toggle,
+      .peer-delete {width:100%;}
       .network-row button,
       .security-row button {width:100%;}
       .dns-custom {grid-template-columns:1fr;}
@@ -3063,15 +3079,29 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
 
         <div class="section tab-panel" data-panel="peers">
           <h2>Peers</h2>
-          <div class="peer-form">
+          <div class="event-actions peer-toolbar">
+            <label class="peer-forward-row">
+              <input id="peerForwardAllInput" type="checkbox" title="Forward incoming sensor triggers to enabled peer chimes">
+              Forward sensor triggers to peers
+            </label>
+            <div class="peer-toolbar-buttons">
+              <button id="addPeerBtn" type="button" title="Add a peer chime manually">Add Peer</button>
+              <button id="refreshPeersBtn" type="button" title="Refresh mDNS discovery for peer chimes">Refresh Discovery</button>
+            </div>
+          </div>
+          <div id="peerForm" class="peer-form" hidden>
+            <div class="peer-editor-heading">
+              <h3 id="peerEditorTitle">Add Peer</h3>
+              <button id="cancelPeerBtn" type="button" title="Close the peer editor without saving">Cancel</button>
+            </div>
             <div class="peer-row">
               <div class="peer-field">
                 <label for="peerLabelInput">Label</label>
-                <input id="peerLabelInput" type="text" maxlength="40" placeholder="patio" autocomplete="off" title="Friendly peer chime label">
+                <input id="peerLabelInput" type="text" maxlength="40" placeholder="Enter peer label" autocomplete="off" title="Friendly peer chime label">
               </div>
               <div class="peer-field">
                 <label for="peerUrlInput">URL</label>
-                <input id="peerUrlInput" type="text" maxlength="96" placeholder="http://doorbell-patio.local" autocomplete="off" title="Peer chime base URL">
+                <input id="peerUrlInput" type="text" maxlength="96" placeholder="http://peer-chime.local" autocomplete="off" title="Peer chime base URL">
               </div>
             </div>
             <div class="peer-row">
@@ -3086,17 +3116,10 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             </div>
             <input id="peerIdInput" type="hidden" value="">
             <div class="peer-actions">
-              <div id="peerSaveState" class="peer-save-state"></div>
               <button id="savePeerBtn" type="button" title="Save or replace this peer chime">Save Peer</button>
             </div>
           </div>
-          <div class="event-actions">
-            <label class="peer-forward-row">
-              <input id="peerForwardAllInput" type="checkbox" title="Forward incoming sensor triggers to enabled peer chimes">
-              Forward sensor triggers to peers
-            </label>
-            <button id="refreshPeersBtn" type="button" title="Refresh mDNS discovery for peer chimes">Refresh Discovery</button>
-          </div>
+          <div id="peerSaveState" class="peer-save-state"></div>
           <div class="network-help">Discovered chimes come from `_doorbell-chime._tcp` mDNS plus local UDP fallback. Saved settings are overrides.</div>
           <div id="peerList" class="peer-list">
             <div class="peer-empty">Loading...</div>
@@ -3211,11 +3234,15 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     const saveRuleBtn = document.getElementById('saveRuleBtn');
     const ruleSaveState = document.getElementById('ruleSaveState');
     const ruleList = document.getElementById('ruleList');
+    const peerForm = document.getElementById('peerForm');
+    const peerEditorTitle = document.getElementById('peerEditorTitle');
     const peerLabelInput = document.getElementById('peerLabelInput');
     const peerUrlInput = document.getElementById('peerUrlInput');
     const peerTokenInput = document.getElementById('peerTokenInput');
     const peerEnabledInput = document.getElementById('peerEnabledInput');
     const peerIdInput = document.getElementById('peerIdInput');
+    const addPeerBtn = document.getElementById('addPeerBtn');
+    const cancelPeerBtn = document.getElementById('cancelPeerBtn');
     const savePeerBtn = document.getElementById('savePeerBtn');
     const refreshPeersBtn = document.getElementById('refreshPeersBtn');
     const peerForwardAllInput = document.getElementById('peerForwardAllInput');
@@ -3667,12 +3694,12 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         edit.title = 'Edit this peer';
         edit.textContent = 'Edit';
         edit.addEventListener('click', () => editPeer(peer));
-        const del = document.createElement('button');
-        del.className = 'peer-delete';
-        del.type = 'button';
-        del.title = 'Delete this peer';
-        del.textContent = 'Delete';
-        del.addEventListener('click', () => deletePeer(peer));
+        const toggle = document.createElement('button');
+        toggle.className = 'peer-toggle';
+        toggle.type = 'button';
+        toggle.title = peer.enabled === false ? 'Enable this peer' : 'Disable this peer without removing it';
+        toggle.textContent = peer.enabled === false ? 'Enable' : 'Disable';
+        toggle.addEventListener('click', () => setPeerEnabled(peer, peer.enabled === false));
         const meta = document.createElement('div');
         meta.className = 'peer-meta';
         const bits = [
@@ -3686,7 +3713,18 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         row.appendChild(main);
         row.appendChild(test);
         row.appendChild(edit);
-        row.appendChild(del);
+        row.appendChild(toggle);
+        if (peer.saved) {
+          const del = document.createElement('button');
+          del.className = 'peer-delete';
+          del.type = 'button';
+          del.title = peer.discovered
+            ? 'Remove saved settings; the discovered peer will remain visible'
+            : 'Delete this saved peer';
+          del.textContent = peer.discovered ? 'Forget' : 'Delete';
+          del.addEventListener('click', () => deletePeer(peer));
+          row.appendChild(del);
+        }
         row.appendChild(meta);
         peerList.appendChild(row);
       });
@@ -3707,15 +3745,40 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         });
     }
 
-    const editPeer = (peer) => {
-      peerIdInput.value = peer.id || '';
-      peerLabelInput.value = peer.label || '';
-      peerUrlInput.value = peer.url || '';
+    const clearPeerEditor = () => {
+      peerIdInput.value = '';
+      peerLabelInput.value = '';
+      peerUrlInput.value = '';
       peerTokenInput.value = '';
-      peerEnabledInput.checked = peer.enabled !== false;
-      setPeerSaveState(peer.hasToken ? 'Editing existing peer; saved token will be kept if left blank' : 'Editing existing peer');
-      peerLabelInput.focus();
+      peerEnabledInput.checked = true;
     }
+
+    const closePeerEditor = () => {
+      clearPeerEditor();
+      peerForm.hidden = true;
+    }
+
+    const openPeerEditor = (peer = null) => {
+      clearPeerEditor();
+      if (peer) {
+        peerIdInput.value = peer.id || '';
+        peerLabelInput.value = peer.label || '';
+        peerUrlInput.value = peer.url || '';
+        peerEnabledInput.checked = peer.enabled !== false;
+        peerEditorTitle.textContent = `Edit ${peer.label || peer.id || 'Peer'}`;
+        savePeerBtn.textContent = 'Save Changes';
+        setPeerSaveState(peer.hasToken ? 'Saved token will be kept if left blank' : 'Editing peer settings');
+      } else {
+        peerEditorTitle.textContent = 'Add Peer';
+        savePeerBtn.textContent = 'Save Peer';
+        setPeerSaveState('Add a peer manually, or close this editor and use discovery.');
+      }
+      peerForm.hidden = false;
+      peerLabelInput.focus();
+      peerForm.scrollIntoView({block: 'nearest', behavior: 'smooth'});
+    }
+
+    const editPeer = (peer) => openPeerEditor(peer);
 
     const savePeer = () => {
       const body = tokenBody({
@@ -3737,19 +3800,42 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         return r.json();
       })
       .then(data => {
-        peerIdInput.value = '';
-        peerLabelInput.value = '';
-        peerUrlInput.value = '';
-        peerTokenInput.value = '';
-        peerEnabledInput.checked = true;
+        closePeerEditor();
         setPeerSaveState('Saved', 'ok');
         renderPeers(data);
       })
       .catch(err => setPeerSaveState(err.message || 'Save failed', 'error'));
     }
 
+    const setPeerEnabled = (peer, enabled) => {
+      const body = tokenBody({
+        id: peer.id || '',
+        label: peer.label || peer.id || '',
+        url: peer.url || '',
+        enabled: enabled ? '1' : '0'
+      });
+      setPeerSaveState(`${enabled ? 'Enabling' : 'Disabling'} ${peer.label || peer.id}...`);
+      fetchAuth('/peers', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body
+      })
+      .then(r => {
+        if (!r.ok) throw new Error(`Save failed (${r.status})`);
+        return r.json();
+      })
+      .then(data => {
+        setPeerSaveState(`${peer.label || peer.id} ${enabled ? 'enabled' : 'disabled'}`, 'ok');
+        renderPeers(data);
+      })
+      .catch(err => setPeerSaveState(err.message || 'Save failed', 'error'));
+    }
+
     const deletePeer = (peer) => {
-      if (!confirm(`Delete peer "${peer.label || peer.id}"?`)) return;
+      const prompt = peer.discovered
+        ? `Remove saved settings for "${peer.label || peer.id}"? The peer will remain visible while it is discovered.`
+        : `Delete saved peer "${peer.label || peer.id}"?`;
+      if (!confirm(prompt)) return;
       const body = tokenBody({
         id: peer.id || '',
         delete: '1'
@@ -3764,7 +3850,8 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         return r.json();
       })
       .then(data => {
-        setPeerSaveState('Deleted', 'ok');
+        if (peerIdInput.value === (peer.id || '')) closePeerEditor();
+        setPeerSaveState(peer.discovered ? 'Saved peer settings removed' : 'Peer deleted', 'ok');
         renderPeers(data);
       })
       .catch(err => setPeerSaveState(err.message || 'Delete failed', 'error'));
@@ -4070,6 +4157,11 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     saveSecurityBtn.addEventListener('click', saveSecurity);
     refreshEventsBtn.addEventListener('click', refreshEvents);
     saveRuleBtn.addEventListener('click', saveRule);
+    addPeerBtn.addEventListener('click', () => openPeerEditor());
+    cancelPeerBtn.addEventListener('click', () => {
+      closePeerEditor();
+      setPeerSaveState('Peer editor closed');
+    });
     savePeerBtn.addEventListener('click', savePeer);
     refreshPeersBtn.addEventListener('click', () => refreshPeers(true));
     peerForwardAllInput.addEventListener('change', savePeerForwarding);
