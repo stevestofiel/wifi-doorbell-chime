@@ -33,6 +33,8 @@ useful device.
   triggers to enabled peers.
 - [x] Bidirectional peer forwarding and relay-loop prevention bench validated
   between Front and Shop.
+- [x] Near-simultaneous peer playback bench validated between Front and Shop.
+- [x] Manage preview rapid-playback stability bench validated on Shop.
 - [x] Peer editor progressive disclosure and explicit discovered/saved peer
   actions.
 - [x] `NoTiFi huB` product language and capability-based sensor naming
