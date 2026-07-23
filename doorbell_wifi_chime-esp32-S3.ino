@@ -3086,7 +3086,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
             </label>
             <div class="peer-toolbar-buttons">
               <button id="addPeerBtn" type="button" title="Add a peer chime manually">Add Peer</button>
-              <button id="refreshPeersBtn" type="button" title="Refresh mDNS discovery for peer chimes">Refresh Discovery</button>
+              <button id="refreshPeersBtn" type="button" title="Scan the local network for peer chimes">Scan for Chimes</button>
             </div>
           </div>
           <div id="peerForm" class="peer-form" hidden>
@@ -3732,15 +3732,15 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
 
     const refreshPeers = (force = false) => {
       const url = force ? '/peers?refresh=1' : '/peers';
-      if (force) setPeerSaveState('Refreshing discovery...');
+      if (force) setPeerSaveState('Scanning for chimes...');
       return fetch(url)
         .then(r => r.json())
         .then(data => {
-          if (force) setPeerSaveState('Discovery refreshed', 'ok');
+          if (force) setPeerSaveState('Chime scan complete', 'ok');
           renderPeers(data);
         })
         .catch(() => {
-          if (force) setPeerSaveState('Discovery refresh failed', 'error');
+          if (force) setPeerSaveState('Chime scan failed', 'error');
           peerList.innerHTML = '<div class="peer-empty">Unable to load peers.</div>';
         });
     }
