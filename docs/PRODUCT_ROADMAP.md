@@ -42,6 +42,7 @@ useful device.
   and initial false-trigger resistance bench validated.
 - [x] Peer editor progressive disclosure and explicit discovered/saved peer
   actions.
+- [x] Human-friendly hub hostname and peer connection identity UI.
 - [x] `NoTiFi huB` product language and capability-based sensor naming
   architecture documented.
 - [ ] Peer reachability diagnostics for IoT/client-isolation failures.

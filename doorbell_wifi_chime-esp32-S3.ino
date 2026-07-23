@@ -435,6 +435,7 @@ void handleStatus(AsyncWebServerRequest *request) {
   doc["fsUsedPct"] = usedPct;
   doc["wifi"] = (WiFi.status() == WL_CONNECTED) ? "connected" : "disconnected";
   doc["ip"] = WiFi.isConnected() ? WiFi.localIP().toString() : "";
+  doc["hostname"] = buildMdnsName(deviceLabel);
   doc["mdns"] = buildMdnsName(deviceLabel) + ".local";
   doc["lanDns"] = buildLanDnsHost(buildMdnsName(deviceLabel), lanDnsSuffix);
   doc["lanDnsSuffix"] = lanDnsSuffix;
@@ -922,6 +923,7 @@ void appendPeerPublicJson(JsonArray out,
                           const String &id,
                           const String &label,
                           const String &url,
+                          const String &host,
                           bool enabled,
                           bool discovered,
                           bool saved,
@@ -930,6 +932,7 @@ void appendPeerPublicJson(JsonArray out,
   item["id"] = id;
   item["label"] = label;
   item["url"] = url;
+  item["host"] = host;
   item["enabled"] = enabled;
   item["discovered"] = discovered;
   item["saved"] = saved;
@@ -970,7 +973,15 @@ void sendPeersResponse(AsyncWebServerRequest *request, DynamicJsonDocument &doc)
     bool enabled = true;
     bool saved = false;
     copySavedPeerOverride(doc, id, url, label, enabled, token, saved);
-    appendPeerPublicJson(peers, id, label, url, enabled, true, saved, token);
+    appendPeerPublicJson(peers,
+                         id,
+                         label,
+                         url,
+                         discoveredPeers[i].host,
+                         enabled,
+                         true,
+                         saved,
+                         token);
   }
 
   for (JsonObject peer : doc["peers"].as<JsonArray>()) {
@@ -990,7 +1001,7 @@ void sendPeersResponse(AsyncWebServerRequest *request, DynamicJsonDocument &doc)
     if (label.length() == 0) label = id;
     bool enabled = peer["enabled"] | true;
     String token = peer["token"] | "";
-    appendPeerPublicJson(peers, id, label, url, enabled, false, true, token);
+    appendPeerPublicJson(peers, id, label, url, "", enabled, false, true, token);
   }
   String payload;
   serializeJson(response, payload);
@@ -2189,6 +2200,7 @@ void handleSetLabel(AsyncWebServerRequest *request) {
   StaticJsonDocument<512> doc;
   doc["ok"] = true;
   doc["label"] = deviceLabel;
+  doc["hostname"] = mdnsName;
   doc["mdns"] = mdnsName + ".local";
   doc["lanDns"] = buildLanDnsHost(mdnsName, lanDnsSuffix);
   doc["lanDnsSuffix"] = lanDnsSuffix;
@@ -2444,7 +2456,7 @@ static const char ROOT_PAGE_TEMPLATE[] PROGMEM = R"rawliteral(
     <div class="topline">
       <div>
         <h1>Doorbell Chime</h1>
-        <div class="device-id">__MDNS_HOST__ · __IPADDR__</div>
+        <div class="device-id">__HOSTNAME__ · __IPADDR__</div>
       </div>
       <div class="status-pill">__STATUS__</div>
     </div>
@@ -2559,7 +2571,7 @@ void handleRoot(AsyncWebServerRequest *request) {
   int usedPct = totalBytes ? int((usedBytes * 100) / totalBytes) : 0;
   String fsText = String(freeBytes / 1024.0, 1) + " kB free of " + String(totalBytes / 1024.0, 1) + " kB";
   String ipText = WiFi.isConnected() ? WiFi.localIP().toString() : "not connected";
-  String mdnsHost = buildMdnsName(deviceLabel) + ".local";
+  String hostname = buildMdnsName(deviceLabel);
 
   String html = FPSTR(ROOT_PAGE_TEMPLATE);
   html.replace("__STATUS__", statusLine);
@@ -2575,7 +2587,7 @@ void handleRoot(AsyncWebServerRequest *request) {
   html.replace("__GAIN100__", String(int(currentGain * 100)));
   html.replace("__GAIN__", String(currentGain, 2));
   html.replace("__DEVICE_LABEL__", deviceLabel);
-  html.replace("__MDNS_HOST__", mdnsHost);
+  html.replace("__HOSTNAME__", hostname);
 
   AsyncWebServerResponse *response = request->beginResponse(200, "text/html", html);
   response->addHeader("Cache-Control", "no-store");
@@ -3139,8 +3151,9 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       <div class="big" id="deviceStatus">Loading…</div>
       <div class="sub" id="deviceActive">No chime loaded</div>
       <div>
-        <div class="tiny">IP: <span id="deviceIp">—</span></div>
-        <div class="tiny">mDNS: <span id="deviceMdns">doorbell.local</span></div>
+        <div class="tiny">Local hostname: <span id="deviceHostname">doorbell</span></div>
+        <div class="tiny">mDNS address: <span id="deviceMdns">doorbell.local</span></div>
+        <div class="tiny">IP address: <span id="deviceIp">—</span></div>
         <div class="tiny" id="deviceLanDnsRow" style="display:none;">LAN DNS: <span id="deviceLanDns">off</span></div>
       </div>
     </div>
@@ -3305,19 +3318,20 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           <div class="network-box" style="margin-top:1rem;">
             <div class="network-title">Device Name</div>
             <div class="network-row">
-              <input id="labelInput" type="text" value="" maxlength="24" placeholder="front-door" title="Short room or location label used in the mDNS name">
-              <button id="saveLabelBtn" type="button" title="Save the device name and advanced LAN DNS setting">Save</button>
+              <input id="labelInput" type="text" value="" maxlength="24" placeholder="front-door" title="Short room or location label used in local network and mDNS names">
+              <button id="saveLabelBtn" type="button" title="Save the device name and optional advanced DNS suffix">Save</button>
               <button id="resetWifiBtn" class="btn-secondary" type="button" title="Shows a warning, then clears saved Wi-Fi credentials and reboots into setup mode">Reset Wi‑Fi</button>
             </div>
-            <div class="network-help">mDNS: <span id="mdnsHost">doorbell.local</span></div>
+            <div class="network-help">Local hostname: <span id="hostnameHost">doorbell</span></div>
+            <div class="network-help">mDNS address: <span id="mdnsHost">doorbell.local</span></div>
             <div class="save-state" id="deviceSaveState"></div>
             <details class="advanced-box">
-              <summary title="Show optional network settings for users with local DNS configured">Advanced</summary>
+              <summary title="Show optional DNS suffix settings for users with local DNS configured">Advanced DNS</summary>
               <div class="advanced-body">
                 <div class="network-title">LAN DNS Name</div>
                 <div class="network-help">LAN DNS: <span id="lanDnsHost">off</span></div>
                 <div class="dns-options">
-                  <label title="Do not show a LAN DNS name; use mDNS or a reserved IP instead"><input type="radio" name="lanDnsSuffix" value="" checked> Off</label>
+                  <label title="Do not add a custom DNS suffix; use the local hostname, mDNS address, or a reserved IP"><input type="radio" name="lanDnsSuffix" value="" checked> Off</label>
                   <label title="Use this only if your router or DNS server resolves .lan names"><input type="radio" name="lanDnsSuffix" value="lan"> .lan</label>
                   <label title="Standards-friendly home-network DNS suffix; requires router or DNS support"><input type="radio" name="lanDnsSuffix" value="home.arpa"> .home.arpa</label>
                   <label class="dns-custom">
@@ -3325,7 +3339,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
                     <input id="lanDnsCustomInput" type="text" maxlength="48" placeholder="iot.lan" title="Custom suffix your router or DNS server resolves, such as iot.lan">
                   </label>
                 </div>
-                <div class="network-help">For UniFi Protect, use this only if UniFi Network or local DNS resolves the name. Otherwise use a reserved IP address.</div>
+                <div class="network-help">UniFi Protect can often use the local hostname without a suffix, such as <code>doorbell-front</code>. Choose a suffix only when your router or DNS server is configured for it.</div>
               </div>
             </details>
           </div>
@@ -3405,6 +3419,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     const deviceStatus = document.getElementById('deviceStatus');
     const deviceActive = document.getElementById('deviceActive');
     const deviceIp = document.getElementById('deviceIp');
+    const deviceHostname = document.getElementById('deviceHostname');
     const deviceMdns = document.getElementById('deviceMdns');
     const deviceLanDnsRow = document.getElementById('deviceLanDnsRow');
     const deviceLanDns = document.getElementById('deviceLanDns');
@@ -3414,6 +3429,7 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
     const labelInput = document.getElementById('labelInput');
     const saveLabelBtn = document.getElementById('saveLabelBtn');
     const resetWifiBtn = document.getElementById('resetWifiBtn');
+    const hostnameHost = document.getElementById('hostnameHost');
     const mdnsHost = document.getElementById('mdnsHost');
     const lanDnsHost = document.getElementById('lanDnsHost');
     const deviceSaveState = document.getElementById('deviceSaveState');
@@ -3690,10 +3706,12 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
           const hasActive = (s.activePath || '').length > 0;
           deviceStatus.textContent = hasActive ? 'Active Chime' : 'No Chime Loaded';
           deviceActive.textContent = activeName;
-          deviceIp.textContent = s.ip || 'not connected';
+          deviceHostname.textContent = s.hostname || 'doorbell';
           deviceMdns.textContent = s.mdns || 'doorbell.local';
+          deviceIp.textContent = s.ip || 'not connected';
           deviceLanDns.textContent = s.lanDns || 'off';
           deviceLanDnsRow.style.display = s.lanDns ? 'block' : 'none';
+          hostnameHost.textContent = s.hostname || 'doorbell';
           mdnsHost.textContent = s.mdns || 'doorbell.local';
           lanDnsHost.textContent = s.lanDns || 'off';
           labelInput.value = (s.deviceLabel ?? labelInput.value ?? '');
@@ -3815,6 +3833,18 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       return peer.enabled === false ? `${label} (disabled)` : label;
     }
 
+    const peerDisplayHost = (peer) => {
+      const discoveredHost = String(peer.host || '').replace(/\.local$/i, '');
+      if (discoveredHost) return discoveredHost;
+      try {
+        const hostname = new URL(peer.url || '').hostname.replace(/\.local$/i, '');
+        const isIpv4 = /^\d{1,3}(?:\.\d{1,3}){3}$/.test(hostname);
+        return isIpv4 ? '' : hostname;
+      } catch (_) {
+        return '';
+      }
+    }
+
     const renderPeers = (data) => {
       peerForwardAllInput.checked = data.forwardAll === true;
       const peers = data.peers || [];
@@ -3860,13 +3890,14 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
         const meta = document.createElement('div');
         meta.className = 'peer-meta';
         const bits = [
-          peer.url || '',
+          peerDisplayHost(peer),
           peer.discovered ? 'discovered' : '',
           peer.saved ? 'saved settings' : '',
           peer.hasToken ? 'token saved' : '',
           peer.enabled === false ? 'disabled' : 'enabled'
         ].filter(Boolean);
         meta.textContent = bits.join(' · ');
+        if (peer.url) meta.title = `Current connection: ${peer.url}`;
         row.appendChild(main);
         row.appendChild(test);
         row.appendChild(edit);
@@ -4228,6 +4259,8 @@ static const char UPLOAD_PAGE_HTML[] PROGMEM = R"rawliteral(
       .then(resp => {
         if (resp && resp.ok) {
           labelInput.value = resp.label || '';
+          hostnameHost.textContent = resp.hostname || 'doorbell';
+          deviceHostname.textContent = resp.hostname || 'doorbell';
           mdnsHost.textContent = resp.mdns || 'doorbell.local';
           deviceMdns.textContent = resp.mdns || 'doorbell.local';
           lanDnsHost.textContent = resp.lanDns || 'off';
